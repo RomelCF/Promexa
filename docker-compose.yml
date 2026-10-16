@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  # -------------------------------------------------------------------------
+  # PostgreSQL: Transacciones, usuarios, publicaciones, productos, mensajes
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: promexa_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-promexa_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - promexa-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------------------------
+  # Neo4j: Grafo de relaciones (usuarios, publicaciones, productos, afinidad)
+  # -------------------------------------------------------------------------
+  neo4j:
+    image: neo4j:5-community
+    container_name: promexa_neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4j_secure_password}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    ports:
+      - "7474:7474" # Browser Web UI
+      - "${NEO4J_PORT:-7687}:7687" # Bolt Protocol
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - promexa-network
+
+  # -------------------------------------------------------------------------
+  # Redis: Broker WebSockets, colas livianas y caché distribuido
+  # -------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: promexa_redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-redis_secure_password}"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - promexa-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secure_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------------------------
+  # ML Recommendation Service (Python / FastAPI / Scikit-learn / Pandas)
+  # -------------------------------------------------------------------------
+  # ml-service:
+  #   build:
+  #     context: ./apps/ml-service
+  #     dockerfile: Dockerfile
+  #   container_name: promexa_ml_service
+  #   restart: unless-stopped
+  #   environment:
+  #     PORT: ${ML_SERVICE_PORT:-8000}
+  #     NEO4J_URI: bolt://neo4j:7687
+  #     NEO4J_USER: ${NEO4J_USER:-neo4j}
+  #     NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j_secure_password}
+  #     POSTGRES_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/${POSTGRES_DB:-promexa_db}
+  #   ports:
+  #     - "${ML_SERVICE_PORT:-8000}:8000"
+  #   depends_on:
+  #     - postgres
+  #     - neo4j
+  #   networks:
+  #     - promexa-network
+
+  # -------------------------------------------------------------------------
+  # Backend NestJS (REST API + WebSockets Gateway)
+  # -------------------------------------------------------------------------
+  # api:
+  #   build:
+  #     context: ./apps/api
+  #     dockerfile: Dockerfile
+  #   container_name: promexa_api
+  #   restart: unless-stopped
+  #   environment:
+  #     PORT: ${API_PORT:-3001}
+  #     DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/${POSTGRES_DB:-promexa_db}
+  #     NEO4J_URI: bolt://neo4j:7687
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: 6379
+  #     REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secure_password}
+  #     ML_SERVICE_URL: http://ml-service:8000
+  #   ports:
+  #     - "${API_PORT:-3001}:3001"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     neo4j:
+  #       condition: service_started
+  #   networks:
+  #     - promexa-network
+
+  # -------------------------------------------------------------------------
+  # Frontend Next.js (App Router, React, TypeScript)
+  # -------------------------------------------------------------------------
+  # web:
+  #   build:
+  #     context: ./apps/web
+  #     dockerfile: Dockerfile
+  #   container_name: promexa_web
+  #   restart: unless-stopped
+  #   environment:
+  #     PORT: 3000
+  #     NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+  #     NEXT_PUBLIC_WS_URL: ws://localhost:3001
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - promexa-network
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  neo4j_logs:
+  redis_data:
+
+networks:
+  promexa-network:
+    driver: bridge

@@ -1,0 +1,57 @@
+name: Promexa CI
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  backend-lint-and-test:
+    name: Backend (NestJS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check files
+        run: echo "Backend CI ready for npm install, lint and tests"
+
+  frontend-lint-and-build:
+    name: Frontend (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check files
+        run: echo "Frontend CI ready for npm install, lint and build"
+
+  ml-lint-and-test:
+    name: ML Recommendation Service (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/ml-service
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Check Syntax
+        run: python -m py_compile app/main.py
