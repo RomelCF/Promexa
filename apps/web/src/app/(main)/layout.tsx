@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { ChatProvider } from '@/lib/use-chat-socket';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/lib/auth-context';
@@ -43,12 +44,12 @@ export default function MainLayout({
   }
 
   return (
-    <>
+    <ChatProvider>
       <Header />
       <main className="w-full pt-16 flex-1">
         {children}
       </main>
       <Footer />
-    </>
+    </ChatProvider>
   );
 }

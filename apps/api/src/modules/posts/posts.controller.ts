@@ -1,5 +1,7 @@
 import {
   Controller,
+  UseGuards,
+  Request,
   Get,
   Post,
   Body,
@@ -8,9 +10,11 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PostsService } from './posts.service';
 
 @Controller('posts')
+@UseGuards(JwtAuthGuard)
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
@@ -22,9 +26,10 @@ export class PostsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   create(
+    @Request() req,
     @Body()
     body: {
-      author: string;
+      authorId: string;
       authorAvatar: string;
       isVerified: boolean;
       content: string;
@@ -33,7 +38,8 @@ export class PostsController {
       tags?: string[];
     }
   ) {
-    return this.postsService.create(body);
+    return this.postsService.create({ ...body, authorId: req.user.userId,
+      authorAvatar: req.user.avatar, isVerified: req.user.isVerified });
   }
 
   @Post(':id/like')
@@ -51,6 +57,7 @@ export class PostsController {
   @Post(':id/comments')
   @HttpCode(HttpStatus.CREATED)
   addComment(
+    @Request() req,
     @Param('id') id: string,
     @Body()
     body: {
@@ -62,9 +69,9 @@ export class PostsController {
   ) {
     return this.postsService.addComment(
       id,
-      body.author,
-      body.authorAvatar,
-      body.isVerified,
+      req.user.name,
+      req.user.avatar,
+      req.user.isVerified,
       body.text
     );
   }

@@ -1,20 +1,231 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useChatConnection } from '@/lib/use-chat-socket';
 import { useAuth } from '@/lib/auth-context';
 
+interface SearchUser {
+  id: string;
+  name: string;
+  email: string;
+  profileType: 'personal' | 'business';
+  isVerified: boolean;
+  avatar: string;
+  role: string;
+  relationshipStatus: 'NONE' | 'REQUEST_SENT' | 'REQUEST_RECEIVED' | 'FRIENDS';
+}
+
 export default function Header() {
+  const { connected } = useChatConnection();
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Notifications state
+  const [friendRequests, setFriendRequests] = useState<any[]>([]);
+  const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
+  const [notifActionLoadingId, setNotifActionLoadingId] = useState<string | null>(null);
+  const notifContainerRef = useRef<HTMLDivElement>(null);
+
+  const getValidAuthToken = () => {
+    return token || (typeof window !== 'undefined' ? localStorage.getItem('promexa_auth_token') : null);
+  };
+
+  // Close notifications dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        notifContainerRef.current &&
+        !notifContainerRef.current.contains(e.target as Node)
+      ) {
+        setShowNotificationsMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch pending friend requests for the authentic logged-in user only
+  const fetchFriendRequests = async () => {
+    if (!user) {
+      setFriendRequests([]);
+      return;
+    }
+
+    const authToken = getValidAuthToken();
+    if (!authToken) {
+      setFriendRequests([]);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/users/friend-requests', {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFriendRequests(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error('Error fetching friend requests:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchFriendRequests();
+      const interval = setInterval(fetchFriendRequests, 10000);
+      return () => clearInterval(interval);
+    } else {
+      setFriendRequests([]);
+    }
+  }, [user, token]);
+
+  const handleAcceptFriendRequest = async (requestId: string, requesterId?: string) => {
+    const authToken = getValidAuthToken();
+    if (!authToken) return;
+
+    setNotifActionLoadingId(requestId);
+    try {
+      const res = await fetch(`/api/users/friend-requests/${requestId}/accept`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      if (res.ok) {
+        setFriendRequests((prev) => prev.filter((req) => req.id !== requestId));
+        if (requesterId) {
+          setSearchResults((prev) =>
+            prev.map((u) => (u.id === requesterId ? { ...u, relationshipStatus: 'FRIENDS' } : u))
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Error accepting friend request:', err);
+    } finally {
+      setNotifActionLoadingId(null);
+    }
+  };
+
+  const handleRejectFriendRequest = async (requestId: string) => {
+    const authToken = getValidAuthToken();
+    if (!authToken) return;
+
+    setNotifActionLoadingId(requestId);
+    try {
+      const res = await fetch(`/api/users/friend-requests/${requestId}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      if (res.ok) {
+        setFriendRequests((prev) => prev.filter((req) => req.id !== requestId));
+      }
+    } catch (err) {
+      console.error('Error rejecting friend request:', err);
+    } finally {
+      setNotifActionLoadingId(null);
+    }
+  };
 
   const router = useRouter();
   const isCurrent = (path: string) => {
     if (path === '/' && pathname === '/') return true;
     if (path !== '/' && pathname?.startsWith(path)) return true;
     return false;
+  };
+
+  // Close search dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(e.target as Node)
+      ) {
+        setShowSearchDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Debounced search effect
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setShowSearchDropdown(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const authToken = getValidAuthToken();
+        const headers: Record<string, string> = {};
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}`, {
+          headers,
+        });
+
+        if (res.ok) {
+          const data: SearchUser[] = await res.json();
+          setSearchResults(data);
+          setShowSearchDropdown(true);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (err) {
+        console.error('Error buscando usuarios:', err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const handleSendFriendRequest = async (targetUserId: string) => {
+    setActionLoadingId(targetUserId);
+    try {
+      const authToken = getValidAuthToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const res = await fetch(`/api/users/${targetUserId}/friend-request`, {
+        method: 'POST',
+        headers,
+      });
+
+      if (res.ok) {
+        setSearchResults((prev) =>
+          prev.map((u) =>
+            u.id === targetUserId ? { ...u, relationshipStatus: 'REQUEST_SENT' } : u
+          )
+        );
+      }
+    } catch (err) {
+      console.error('Error enviando solicitud:', err);
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   return (
@@ -31,17 +242,155 @@ export default function Header() {
         </Link>
 
         {/* Global Search */}
-        <div className="flex-1 max-w-lg hidden md:block">
+        <div ref={searchContainerRef} className="relative flex-1 max-w-lg hidden md:block">
           <div className="relative flex items-center w-full">
             <span className="material-symbols-outlined absolute left-3 text-outline pointer-events-none text-[20px]">
               search
             </span>
             <input
-              className="w-full h-[42px] pl-10 pr-4 bg-[#FFFFFF] border border-[#E5E7EB] rounded-lg font-body-md text-body-md text-on-surface placeholder:text-outline focus:border-primary-container focus:outline-none transition-colors"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => {
+                if (searchQuery.trim() && searchResults.length > 0) {
+                  setShowSearchDropdown(true);
+                }
+              }}
+              className="w-full h-[42px] pl-10 pr-10 bg-[#FFFFFF] border border-[#E5E7EB] rounded-lg font-body-md text-body-md text-on-surface placeholder:text-outline focus:border-primary-container focus:outline-none transition-colors"
               placeholder="Buscar en Promexa (personas, negocios, productos)..."
               type="text"
             />
+            {isSearching && (
+              <div className="absolute right-3 w-4 h-4 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
+            )}
+            {!isSearching && searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSearchResults([]);
+                  setShowSearchDropdown(false);
+                }}
+                className="absolute right-3 text-gray-400 hover:text-gray-600 text-xs font-semibold"
+              >
+                ✕
+              </button>
+            )}
           </div>
+
+          {/* Search Results Dropdown */}
+          {showSearchDropdown && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+              <div className="p-2 border-b border-gray-100 flex items-center justify-between bg-gray-50/70 text-xs text-gray-500 font-medium">
+                <span>Personas y Negocios ({searchResults.length})</span>
+                {searchQuery && <span className="text-[11px] text-gray-400">Coincidencias para &quot;{searchQuery}&quot;</span>}
+              </div>
+
+              {searchResults.length === 0 ? (
+                <div className="p-6 text-center text-sm text-gray-500">
+                  <span className="material-symbols-outlined text-3xl text-gray-300 mb-1 block">
+                    person_off
+                  </span>
+                  No se encontraron personas con ese nombre o correo
+                </div>
+              ) : (
+                <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+                  {searchResults.map((person) => (
+                    <div
+                      key={person.id}
+                      className="p-3 flex items-center justify-between hover:bg-gray-50/80 transition-colors gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <img
+                          src={person.avatar}
+                          alt={person.name}
+                          className="w-10 h-10 rounded-full object-cover border border-gray-200 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-sm text-gray-900 truncate">
+                              {person.name}
+                            </span>
+                            {person.isVerified && (
+                              <span
+                                className="material-symbols-outlined text-blue-500 text-[15px] shrink-0"
+                                title="Verificado"
+                              >
+                                verified
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500 truncate">
+                            <span>{person.email}</span>
+                            <span>•</span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                person.profileType === 'business'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-blue-50 text-blue-700'
+                              }`}
+                            >
+                              {person.profileType === 'business' ? 'Negocio' : 'Personal'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botón de Amistad / Conectar */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {person.relationshipStatus === 'FRIENDS' ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-medium text-xs rounded-lg border border-emerald-200 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[14px]">check</span>
+                              Amigos
+                            </span>
+                            <Link
+                              href={`/mensajes?userId=${encodeURIComponent(person.id)}`}
+                              onClick={() => setShowSearchDropdown(false)}
+                              className="p-1.5 text-gray-500 hover:text-primary-container hover:bg-gray-100 rounded-lg"
+                              title="Enviar mensaje"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">chat</span>
+                            </Link>
+                          </div>
+                        ) : person.relationshipStatus === 'REQUEST_SENT' ? (
+                          <span className="px-2.5 py-1 bg-gray-100 text-gray-600 font-medium text-xs rounded-lg flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[14px]">schedule</span>
+                            Enviada
+                          </span>
+                        ) : person.relationshipStatus === 'REQUEST_RECEIVED' ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const matchingReq = friendRequests.find((r) => r.requester?.id === person.id);
+                              if (matchingReq) {
+                                await handleAcceptFriendRequest(matchingReq.id, person.id);
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs rounded-lg shadow-sm flex items-center gap-1 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">check</span>
+                            Aceptar solicitud
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={actionLoadingId === person.id}
+                            onClick={() => handleSendFriendRequest(person.id)}
+                            className="px-3 py-1.5 bg-primary-container text-white hover:bg-primary-dark font-medium text-xs rounded-lg shadow-sm transition-all flex items-center gap-1 disabled:opacity-50"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">
+                              person_add
+                            </span>
+                            {actionLoadingId === person.id ? 'Enviando...' : 'Agregar'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Navigation Tabs */}
@@ -77,18 +426,115 @@ export default function Header() {
             }`}
           >
             <span>Mensajes</span>
-            <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
+            <span title={connected ? 'Conectado' : 'Sin conexion'} className={`h-2 w-2 rounded-full inline-block ${connected ? 'bg-emerald-500' : 'bg-gray-400'}`} />
           </Link>
 
-          <button
-            type="button"
-            className="relative px-3 py-2 rounded-lg font-body-md text-body-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex items-center gap-1.5"
-          >
-            <span>Notificaciones</span>
-            <span className="px-1.5 py-0.2 bg-[#DC2626] text-on-error font-label-sm text-label-sm rounded-full text-[11px] leading-tight">
-              3
-            </span>
-          </button>
+          {/* Notification Menu */}
+          <div ref={notifContainerRef} className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setShowNotificationsMenu(!showNotificationsMenu);
+                fetchFriendRequests();
+              }}
+              className={`relative px-3 py-2 rounded-lg font-body-md text-body-md transition-colors flex items-center gap-1.5 ${
+                showNotificationsMenu
+                  ? 'bg-primary-container text-on-primary'
+                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+              }`}
+            >
+              <span>Notificaciones</span>
+              {friendRequests.length > 0 && (
+                <span className="px-1.5 py-0.2 bg-[#DC2626] text-white font-label-sm text-label-sm rounded-full text-[11px] leading-tight font-bold shadow-sm animate-pulse">
+                  {friendRequests.length}
+                </span>
+              )}
+            </button>
+
+            {/* Notifications Dropdown */}
+            {showNotificationsMenu && (
+              <div className="absolute right-0 mt-2 w-84 sm:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="p-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/80">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary-container text-[20px]">
+                      notifications
+                    </span>
+                    <h3 className="font-semibold text-sm text-gray-900">Notificaciones</h3>
+                  </div>
+                  {friendRequests.length > 0 && (
+                    <span className="px-2 py-0.5 bg-red-100 text-red-700 font-medium text-[11px] rounded-full">
+                      {friendRequests.length} nueva{friendRequests.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+
+                <div className="max-h-96 overflow-y-auto divide-y divide-gray-100">
+                  {friendRequests.length === 0 ? (
+                    <div className="p-8 text-center text-gray-500">
+                      <span className="material-symbols-outlined text-4xl text-gray-300 mb-2 block">
+                        notifications_none
+                      </span>
+                      <p className="text-sm font-medium text-gray-700">Sin notificaciones pendientes</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Cuando alguien te envíe una solicitud de amistad aparecerá aquí.
+                      </p>
+                    </div>
+                  ) : (
+                    friendRequests.map((req) => (
+                      <div key={req.id} className="p-3.5 hover:bg-gray-50/70 transition-colors">
+                        <div className="flex items-start gap-3">
+                          <img
+                            src={req.requester?.avatar || 'https://lh3.googleusercontent.com/aida-public/AB6AXuAH3UDaH5S4ho_6H4oKGGbzvRDc6LorHWo-1pfiUJf12W1Auj4lfoQJv49kAmTodxRQ2qjn9Gw3OCKEgNjPAaYs7bWaSTa1ib_zIwwkI7_Q-YO8vrIQcqc93EcFCKTlM8e8icVlD5kHDDY2RToEXmganGu3acS1w16yAXHMOQI9YlC8xg_qHtttlbMKoseK0hFBvd51mYVAjPwV2omGzRF7l9YtdZHuawkgmcCUf4Q'}
+                            alt={req.requester?.name || 'Usuario'}
+                            className="w-10 h-10 rounded-full object-cover border border-gray-200 shrink-0 mt-0.5"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-sm text-gray-900 truncate">
+                                {req.requester?.name || 'Usuario Promexa'}
+                              </span>
+                              {req.requester?.isVerified && (
+                                <span className="material-symbols-outlined text-blue-500 text-[14px]">
+                                  verified
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Te ha enviado una solicitud de amistad
+                            </p>
+                            <span className="text-[10px] text-gray-400">
+                              {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+
+                            {/* Acciones */}
+                            <div className="flex items-center gap-2 mt-2.5">
+                              <button
+                                type="button"
+                                disabled={notifActionLoadingId === req.id}
+                                onClick={() => handleAcceptFriendRequest(req.id, req.requester?.id)}
+                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg shadow-sm transition-all flex items-center gap-1 disabled:opacity-50"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">check</span>
+                                {notifActionLoadingId === req.id ? 'Aceptando...' : 'Aceptar'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={notifActionLoadingId === req.id}
+                                onClick={() => handleRejectFriendRequest(req.id)}
+                                className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-all disabled:opacity-50"
+                              >
+                                Rechazar
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Right User Profile */}
@@ -147,16 +593,12 @@ export default function Header() {
                     </span>
                   </div>
 
-                  <Link
-                    href="/"
-                    className="flex items-center gap-2.5 px-4 py-2.5 text-on-surface hover:bg-surface-container font-body-md text-body-md transition-colors"
-                    onClick={() => setShowProfileMenu(false)}
-                  >
-                    <span className="material-symbols-outlined text-[18px] text-outline">
-                      person
-                    </span>
-                    <span>Mi Perfil</span>
-                  </Link>
+                  <button type="button"
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-on-surface hover:bg-surface-container text-left"
+                    onClick={() => { setShowProfileMenu(false); router.push('/perfil'); }}>
+                    <span className="material-symbols-outlined text-[18px] text-outline">edit</span>
+                    <span>Editar perfil</span>
+                  </button>
 
                   <Link
                     href="/marketplace"

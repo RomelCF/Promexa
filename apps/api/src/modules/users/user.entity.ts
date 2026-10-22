@@ -1,3 +1,5 @@
+export type Role = 'USER' | 'BUSINESS' | 'ADMIN';
+
 export interface User {
   id: string;
   name: string;
@@ -6,6 +8,6 @@ export interface User {
   profileType: 'personal' | 'business';
   isVerified: boolean;
   avatar: string;
-  role: 'user' | 'business' | 'admin';
+  role: Role;
   createdAt: Date;
 }

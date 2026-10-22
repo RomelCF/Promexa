@@ -120,3 +120,13 @@ docker-compose up -d postgres neo4j redis
 - **PostgreSQL**: `localhost:5432`
 - **Neo4j Browser UI**: `http://localhost:7474` (Bolt: `localhost:7687`)
 - **Redis**: `localhost:6379`
+
+
+## Imagenes de perfil y posts
+
+Subida de JPG, PNG y WebP con validacion y procesamiento en el backend. Almacenamiento local por defecto, S3/MinIO configurable. Ver [guia de imagenes](docs/images.md).
+
+
+## Trabajo en equipo y transferencia de datos
+
+Ver [guia para otro desarrollador](docs/team-setup.md): configuracion local, Prisma, respaldo/restauracion de PostgreSQL, imagenes y commit/push.

@@ -1,0 +1,139 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum ProfileType {
+  personal
+  business
+}
+
+enum Role {
+  USER
+  BUSINESS
+  ADMIN
+}
+
+enum RelationshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model User {
+  id           String      @id @default(uuid())
+  name         String      @db.VarChar(100)
+  email        String      @unique @db.VarChar(255)
+  passwordHash String      @db.VarChar(255)
+  profileType  ProfileType @default(personal)
+  isVerified   Boolean     @default(true)
+  avatar       String?     @db.VarChar(500)
+  role         Role        @default(USER)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  sentMessages Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+
+  sentFriendRequests     Friendship[] @relation("SentFriendships")
+  receivedFriendRequests Friendship[] @relation("ReceivedFriendships")
+  posts                  Post[]       @relation("UserPosts")
+  products               Product[]    @relation("UserProducts")
+
+  @@index([name])
+  @@index([email])
+  @@map("users")
+}
+
+model Friendship {
+  id          String             @id @default(uuid())
+  requesterId String
+  addresseeId String
+  status      RelationshipStatus @default(PENDING)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  requester   User               @relation("SentFriendships", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee   User               @relation("ReceivedFriendships", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@map("friendships")
+}
+
+model Post {
+  id           String   @id @default(uuid())
+  authorId     String
+  authorHandle String   @db.VarChar(100)
+  authorAvatar String?  @db.VarChar(500)
+  isVerified   Boolean  @default(false)
+  location     String?  @db.VarChar(200)
+  content      String   @db.Text
+  category     String   @default("following") @db.VarChar(50)
+  tags         String[] @default([])
+  mediaUrl     String?  @db.VarChar(500)
+  productName  String?  @db.VarChar(200)
+  productPrice Float?
+  productBadge String?  @db.VarChar(50)
+  productStock String?  @db.VarChar(100)
+  productDetails String? @db.Text
+  productImage String?  @db.VarChar(500)
+  likes        Int      @default(0)
+  liked        Boolean  @default(false)
+  bookmarked   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  author       User     @relation("UserPosts", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([category])
+  @@map("posts")
+}
+
+model Product {
+  id           String   @id @default(uuid())
+  name         String   @db.VarChar(200)
+  description  String   @db.Text
+  price         Float
+  category     String   @db.VarChar(100)
+  district     String   @db.VarChar(100)
+  store        String   @db.VarChar(200)
+  sellerId     String
+  isVerified   Boolean  @default(false)
+  status       String   @default("Disponible") @db.VarChar(50)
+  image        String?  @db.VarChar(500)
+  contactPhone String?  @db.VarChar(20)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  seller       User     @relation("UserProducts", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId])
+  @@index([category])
+  @@index([district])
+  @@index([status])
+  @@map("products")
+}
+
+model Message {
+  id String @id @default(uuid())
+  senderId String
+  recipientId String
+  text String @db.Text
+  clientMessageId String? @db.VarChar(100)
+  productId String?
+  productName String? @db.VarChar(200)
+  productImage String? @db.VarChar(500)
+  createdAt DateTime @default(now())
+  sender User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, clientMessageId])
+  @@index([senderId, recipientId, createdAt])
+  @@index([recipientId, createdAt])
+  @@map("messages")
+}

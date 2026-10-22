@@ -1,9 +1,19 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { RedisIoAdapter } from './websockets/redis-io.adapter';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  const config = app.get(ConfigService);
+  if (config.get('REDIS_WS_ENABLED') === 'true') {
+    const adapter = new RedisIoAdapter(app);
+    await adapter.connect(config);
+    app.useWebSocketAdapter(adapter);
+  }
+  app.enableShutdownHooks();
 
   // Global API prefix
   app.setGlobalPrefix('api/v1');

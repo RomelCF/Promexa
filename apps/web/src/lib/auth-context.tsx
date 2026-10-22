@@ -2,14 +2,16 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+export type Role = 'USER' | 'BUSINESS' | 'ADMIN';
+
 export interface UserProfile {
   id: string;
   name: string;
   email: string;
   profileType: 'personal' | 'business';
   isVerified: boolean;
-  avatar: string;
-  role: 'user' | 'business' | 'admin';
+  avatar: string | null;
+  role: Role;
 }
 
 interface AuthContextType {
@@ -23,6 +25,7 @@ interface AuthContextType {
     pass: string,
     profileType: 'personal' | 'business'
   ) => Promise<{ success: boolean; error?: string }>;
+  updateProfile: (data: { name: string; email: string; avatar: string | null }) => Promise<void>;
   logout: () => void;
 }
 
@@ -37,23 +40,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const savedUser = localStorage.getItem(STORAGE_KEY_USER);
-      const savedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
-      if (savedUser && savedToken) {
-        setUser(JSON.parse(savedUser));
-        setToken(savedToken);
-      } else {
-        setUser(null);
-        setToken(null);
+    let active = true;
+    const restoreSession = async () => {
+      try {
+        const savedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
+        if (!savedToken) return;
+        const res = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${savedToken}` },
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem(STORAGE_KEY_USER);
+            localStorage.removeItem(STORAGE_KEY_TOKEN);
+          }
+          return;
+        }
+        const profile: UserProfile = await res.json();
+        if (active) {
+          setUser(profile);
+          setToken(savedToken);
+          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(profile));
+        }
+      } catch {
+        // Do not restore stale profile data when the server cannot validate it.
+      } finally {
+        if (active) setIsLoading(false);
       }
-    } catch {
-      setUser(null);
-      setToken(null);
-    } finally {
-      setIsLoading(false);
-    }
+    };
+    restoreSession();
+    return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    const syncSession = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY_TOKEN) return;
+      if (!event.newValue) { setToken(null); setUser(null); }
+      else if (event.newValue !== token) window.location.reload();
+    };
+    window.addEventListener('storage', syncSession);
+    return () => window.removeEventListener('storage', syncSession);
+  }, [token]);
 
   const login = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -106,6 +133,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateProfile = async (data: { name: string; email: string; avatar: string | null }) => {
+    const res = await fetch('/api/users/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(Array.isArray(result.message) ? result.message.join('. ') : result.message || 'No se pudo guardar el perfil');
+    setUser(result);
+    try { localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(result)); } catch {}
+  };
+
   const logout = () => {
     setUser(null);
     setToken(null);
@@ -114,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, register, updateProfile, logout }}>
       {children}
     </AuthContext.Provider>
   );

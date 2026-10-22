@@ -1,155 +1,111 @@
 'use client';
-
-import { useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001';
-
-export interface WsIncomingMessage {
-  id: string;
-  sender: 'other';
-  text: string;
-  senderName: string;
-  time: string;
-  status: 'delivered';
+import { useAuth } from './auth-context';
+export interface ChatMessage {
+  productId?: string | null; productName?: string | null; productImage?: string | null;
+  clientMessageId?: string | null;
+  id: string; senderId: string; recipientId: string; text: string; createdAt: string;
 }
-
-export interface UseChatSocketOptions {
-  chatId: string;
-  userId: string;
-  userName: string;
-  onMessage: (chatId: string, msg: WsIncomingMessage) => void;
-  onTyping: (chatId: string, senderName: string, isTyping: boolean) => void;
-  onMessageSent?: (chatId: string, messageId: string) => void;
+type Listener = { onMessage: (message: ChatMessage) => void; onTyping: (senderId: string, typing: boolean) => void };
+type Presence = Record<string, boolean | null>;
+interface ChatConnection {
+  connected: boolean; presence: Presence;
+  sendMessage: (recipientId: string, text: string, productId?: string) => Promise<ChatMessage>;
+  sendTyping: (recipientId: string, typing: boolean) => void;
+  subscribe: (listener: Listener) => () => void;
+  watch: (ids: string[], productId?: string) => () => void;
 }
-
-export function useChatSocket({
-  chatId,
-  userId,
-  userName,
-  onMessage,
-  onTyping,
-  onMessageSent,
-}: UseChatSocketOptions) {
+const Connection = createContext<ChatConnection | null>(null);
+export function ChatProvider({ children }: { children: React.ReactNode }) {
+  const { token } = useAuth();
   const socketRef = useRef<Socket | null>(null);
-  const currentChatIdRef = useRef<string>(chatId);
-
-  // Actualizar la ref cuando cambia el chatId
-  useEffect(() => {
-    currentChatIdRef.current = chatId;
-  }, [chatId]);
-
-  // Inicializar y conectar el socket (solo una vez)
-  useEffect(() => {
-    if (socketRef.current) return;
-
-    const socket = io(`${WS_URL}/chat`, {
-      transports: ['websocket'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
-
-    socketRef.current = socket;
-
-    socket.on('connect', () => {
-      console.log('[WS] Conectado al servidor de chat:', socket.id);
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.log('[WS] Desconectado:', reason);
-    });
-
-    socket.on('connect_error', (err) => {
-      console.warn('[WS] Error de conexión (backend puede estar offline):', err.message);
-    });
-
-    socket.on('receiveMessage', ({ chatId: incomingChatId, message }: { chatId: string; message: WsIncomingMessage }) => {
-      onMessage(incomingChatId, message);
-    });
-
-    socket.on('userTyping', ({ chatId: incomingChatId, senderName, isTyping }: { chatId: string; senderName: string; isTyping: boolean }) => {
-      onTyping(incomingChatId, senderName, isTyping);
-    });
-
-    socket.on('messageSent', ({ chatId: incomingChatId, messageId }: { chatId: string; messageId: string }) => {
-      onMessageSent?.(incomingChatId, messageId);
-    });
-
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Re-unirse a la nueva sala cuando cambia chatId
-  useEffect(() => {
+  const ready = useRef(false);
+  const presenceSequence = useRef(0);
+  const listeners = useRef(new Set<Listener>());
+  const watches = useRef(new Map<symbol, { ids: string[]; productId?: string }>());
+  const pending = useRef(new Map<string, string>());
+  const [connected, setConnected] = useState(false);
+  const [presence, setPresence] = useState<Presence>({});
+  const syncPresence = useCallback(() => {
     const socket = socketRef.current;
-    if (!socket || !socket.connected) return;
-
-    socket.emit('join', { chatId, userId, name: userName });
-  }, [chatId, userId, userName]);
-
-  // Unirse a la sala cuando se conecta (cubre el caso de conexión tardía)
-  useEffect(() => {
-    const socket = socketRef.current;
-    if (!socket) return;
-
-    const handleConnect = () => {
-      socket.emit('join', {
-        chatId: currentChatIdRef.current,
-        userId,
-        name: userName,
+    if (!socket?.connected || !ready.current) return;
+    const all = Array.from(watches.current.values());
+    const ids = Array.from(new Set(all.flatMap(watch => watch.ids))).slice(0, 100);
+    const productId = all.find(watch => watch.productId)?.productId;
+    const sequence = ++presenceSequence.current;
+    socket.timeout(4000).emit('watchPresence', { userIds: ids, productId },
+      (error: Error | null, response: { ok: boolean; status?: Presence }) => {
+        if (socketRef.current !== socket || !socket.connected || sequence !== presenceSequence.current) return;
+        setPresence(!error && response?.ok ? response.status || {} : {});
       });
-    };
-
-    socket.on('connect', handleConnect);
-    return () => {
-      socket.off('connect', handleConnect);
-    };
-  }, [userId, userName]);
-
-  // Enviar un mensaje a través de WebSocket
-  const sendMessage = useCallback((text: string, time: string) => {
+  }, []);
+  useEffect(() => {
+    setPresence({}); setConnected(false); pending.current.clear();
+    if (!token) return;
+    const socket = io(`${process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001'}/chat`, {
+      auth: { token }, transports: ['websocket'], reconnection: true, reconnectionDelay: 1000, reconnectionDelayMax: 10000,
+    });
+    socketRef.current = socket;
+    socket.on('ready', () => { ready.current = true; setConnected(true); syncPresence(); });
+    const offline = () => { ready.current = false; ++presenceSequence.current; setConnected(false); setPresence({}); };
+    socket.on('disconnect', offline); socket.on('connect_error', offline);
+    const networkOffline = () => { offline(); socket.disconnect(); };
+    const networkOnline = () => socket.connect();
+    window.addEventListener('offline', networkOffline); window.addEventListener('online', networkOnline);
+    socket.on('presenceUnavailable', () => setPresence({}));
+    socket.on('presenceChanged', ({ userId, online }: { userId: string; online: boolean }) => setPresence(previous => ({ ...previous, [userId]: online })));
+    socket.on('presenceUnknown', ({ userId }: { userId: string }) => setPresence(previous => ({ ...previous, [userId]: null })));
+    socket.on('receiveMessage', (message: ChatMessage) => listeners.current.forEach(listener => listener.onMessage(message)));
+    socket.on('userTyping', ({ senderId, isTyping }) => listeners.current.forEach(listener => listener.onTyping(senderId, isTyping)));
+    const interval = setInterval(syncPresence, 15000);
+    return () => { window.removeEventListener('offline', networkOffline); window.removeEventListener('online', networkOnline); ready.current = false; clearInterval(interval); socket.disconnect(); socketRef.current = null; };
+  }, [token, syncPresence]);
+  const subscribe = useCallback((listener: Listener) => {
+    listeners.current.add(listener); return () => { listeners.current.delete(listener); };
+  }, []);
+  const watch = useCallback((ids: string[], productId?: string) => {
+    const id = Symbol(); watches.current.set(id, { ids, productId }); syncPresence();
+    return () => { watches.current.delete(id); syncPresence(); };
+  }, [syncPresence]);
+  const sendMessage = async (recipientId: string, text: string, productId?: string): Promise<ChatMessage> => {
     const socket = socketRef.current;
-    if (!socket || !socket.connected) {
-      // El backend no está disponible, solo opera en modo local
-      return false;
+    if (!socket?.connected || !ready.current) throw new Error('Sin conexion. El mensaje sigue en tu borrador.');
+    const key = JSON.stringify([recipientId, text, productId]);
+    const clientMessageId = pending.current.get(key) || crypto.randomUUID();
+    pending.current.set(key, clientMessageId);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await new Promise<{ ok?: boolean; code?: string; message?: ChatMessage }>(resolve => {
+        if (socketRef.current !== socket || !socket.connected) return resolve({ code: 'TEMPORARY' });
+        socket.timeout(5000).emit('sendMessage', { recipientId, text, productId, clientMessageId },
+          (error: Error | null, response: { ok?: boolean; code?: string; message?: ChatMessage }) => resolve(error ? { code: 'TEMPORARY' } : response || {}));
+      });
+      if (result.ok && result.message) { pending.current.delete(key); return result.message; }
+      if (result.code !== 'TEMPORARY') throw new Error('No se pudo enviar. Revisa el destinatario o el producto.');
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * 2 ** attempt));
     }
-
-    socket.emit('sendMessage', {
-      chatId: currentChatIdRef.current,
-      senderId: userId,
-      senderName: userName,
-      text,
-      time,
-    });
-    return true;
-  }, [userId, userName]);
-
-  // Emitir estado de escritura
-  const sendTyping = useCallback((isTyping: boolean) => {
-    const socket = socketRef.current;
-    if (!socket || !socket.connected) return;
-
-    socket.emit('typing', {
-      chatId: currentChatIdRef.current,
-      senderName: userName,
-      isTyping,
-    });
-  }, [userName]);
-
-  // Cambiar de sala
-  const switchRoom = useCallback((newChatId: string) => {
-    const socket = socketRef.current;
-    if (!socket || !socket.connected) return;
-
-    socket.emit('leave', { chatId: currentChatIdRef.current });
-    socket.emit('join', { chatId: newChatId, userId, name: userName });
-    currentChatIdRef.current = newChatId;
-  }, [userId, userName]);
-
-  const isConnected = () => socketRef.current?.connected ?? false;
-
-  return { sendMessage, sendTyping, switchRoom, isConnected };
+    throw new Error('No se pudo confirmar el envio. Tu borrador se conserva; puedes reintentar sin duplicar el mensaje.');
+  };
+  const sendTyping = (recipientId: string, isTyping: boolean) => {
+    if (socketRef.current?.connected) socketRef.current.emit('typing', { recipientId, isTyping });
+  };
+  return React.createElement(Connection.Provider, { value: { connected, presence, sendMessage, sendTyping, subscribe, watch } }, children);
+}
+export function useChatConnection() {
+  const connection = useContext(Connection);
+  if (!connection) throw new Error('ChatProvider missing');
+  return connection;
+}
+export function useChatSocket({ onMessage, onTyping }: { token: string | null } & Listener) {
+  const connection = useChatConnection();
+  const callbacks = useRef({ onMessage, onTyping }); callbacks.current = { onMessage, onTyping };
+  useEffect(() => connection.subscribe({ onMessage: message => callbacks.current.onMessage(message),
+    onTyping: (id, typing) => callbacks.current.onTyping(id, typing) }), [connection.subscribe]);
+  return connection;
+}
+export function usePresence(ids: (string | undefined)[], productId?: string) {
+  const connection = useChatConnection();
+  const key = JSON.stringify(Array.from(new Set(ids.filter((id): id is string => Boolean(id)))).sort());
+  useEffect(() => connection.watch(JSON.parse(key), productId), [connection.watch, key, productId]);
+  return connection.presence;
 }

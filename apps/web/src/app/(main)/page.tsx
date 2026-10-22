@@ -1,8 +1,25 @@
 'use client';
-
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { usePresence } from '@/lib/use-chat-socket';
+import PresenceDot from '@/components/profile/PresenceDot';
+import ImagePicker from '@/components/profile/ImagePicker';
+import { uploadImage } from '@/lib/upload-image';
+import UserAvatar from '@/components/profile/UserAvatar';
 import { useAuth } from '@/lib/auth-context';
+
+export interface UserProfileModalData {
+  id?: string;
+  name: string;
+  handle?: string;
+  avatar: string;
+  isVerified: boolean;
+  location?: string;
+  bio?: string;
+  mutualCount?: number;
+  tags?: string[];
+}
 
 export interface Comment {
   id: string;
@@ -16,6 +33,7 @@ export interface Comment {
 export interface Post {
   id: string;
   author: string;
+  authorId: string;
   authorHandle: string;
   authorAvatar: string;
   isVerified: boolean;
@@ -39,95 +57,53 @@ export interface Post {
   comments: Comment[];
 }
 
-const INITIAL_POSTS: Post[] = [
-  {
-    id: 'post-1',
-    author: 'Café & Tostaduría Don Pedro',
-    authorHandle: '@cafedonpedro',
-    authorAvatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAVmOH_0LfgKtRrDGfcsmpwLcxKI-qogdYhZsxdqQoOmMDkrE_vsjcq7ZSrbmIc64hmGsuXThjH01bweDQ86iBMNYKYJvijWqr8udkZt0Fv2OzjScCgTqltUH_mqfJVrcCl1bAUCCuWhpiwhIj8nALEatyqGmn2ozrHL0iKq-MwPKzX8ahWnKverkC3WoDO39ecYoRUTWg8KCnqyu8P3gsvX39oXxxL3JePZdazD94',
-    isVerified: true,
-    time: 'Hace 20 min',
-    location: 'Villa Rica / Miraflores',
-    content:
-      '¡Llegó la nueva cosecha de café de especialidad de Villa Rica! Notas a chocolate fino y frutos secos caramelizados. Ya disponible para recoger en tienda o coordinar por chat directo en Promexa. Envíos el mismo día. ☕✨',
-    category: 'local',
-    tags: ['#CafeEspecial', '#VillaRica', '#ComercioLocal'],
-    linkedProduct: {
-      name: 'Café Especial Villa Rica 500g',
-      price: 38.0,
-      badge: 'Disponible',
-      stock: 'Stock: 24 bolsas',
-      details: 'Tueste medio · Origen único · Certificación orgánica',
-      image:
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuBfWrLJ1V3c6Jb9K8w3Zq-cKc7qSLKU79cjiI9iTBrhXaOBne7JqYkQbH4-q1EbqajbZiTt9K2o9-79GgsjXm9gRAA3FzZ4h3gUK9ibFRc9fzCL0nK8oKWMRoTFKJ8f241YtCoWsa1mJOZEt83AakjfSFIb8yazduejMbjC3arYZgbLJGEQsjyv2LCZWCuEgWndVyJuIBJKfHAaOA2wgEsAvMxaMp7qe8gOOUtZpl8',
-    },
-    likes: 48,
-    liked: false,
-    bookmarked: false,
-    comments: [
-      {
-        id: 'c-1',
-        author: 'Lucía Valenzuela',
-        authorAvatar:
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuAW3jNq8mmlQrij_5yuwgR6RLmxDQkghb67R39w3_CFOvKn7Zj77Vhf75Ix2rKKdLNyHUJksp23eBjQ3knwQCAZhRzZHXdzeXnhPC0c56vsVJq3QZ6Wat3KC2QJ_9ocX2IfJVuFDNZchuG02Vr7JdVfX5a9GZ7gXgC_i52g0NZVKUNEB6b-CaWu02_mxYafd3RIh_j1LsW0kzRYW8kJURtEJZ1KZQet-NpunzUX9ys',
-        isVerified: false,
-        text: '¿Tienen molienda para prensa francesa o viene solo en grano entero?',
-        time: 'Hace 12 min',
-      },
-      {
-        id: 'c-2',
-        author: 'Café & Tostaduría Don Pedro',
-        authorAvatar:
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuAhJ61w5_4VsUw3M2vK-Et3MCFxnmCP_Gq3u9aHKjZ0nxeTw3NOhpoSsgRS4zJ-IGVbD6jnuyyF4zAu6GyMwsq0VPJY1t83Vla1bwE37oNjPOAou139ui4v6UbBzZJmGPII9aFDwtaqzOKn_TclJ-wqADTSWLknIK8QhJgb3mWJbNCeLA-R-7JwlCdQPmKtiNAwQSUeZL8ra2Wle55GN3L3Jg4UG-IsrCnqiGpc164',
-        isVerified: true,
-        text: '¡Hola Lucía! Sí, te lo molemos al instante según el método que uses sin costo extra. Escríbenos al chat para coordinarlo.',
-        time: 'Hace 5 min',
-      },
-    ],
-  },
-  {
-    id: 'post-2',
-    author: 'Mariana Silva',
-    authorHandle: '@marianasilva',
-    authorAvatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAshKA2F6OeAr--bAsNxa2jZHsux0iMsWXsROkhcbPVr0wGaswS5OIBf5an35Bg8oEmHcBcv_RPcCUL17B7tTuvf6l5K0Qns8TGbg7BuBw0XNSWRTkYHtzxxt4-YUznJ9hb92FK6v83HpKCKwSgGb2RK7o5sp5DcuB3q2THFoz4xG0bP38-CqntKpGU7klU9rE82OjUUXm3sGnZ6_dD6jR_LaMJpEBXVeaHvfqQNYw',
-    isVerified: false,
-    time: 'Hace 2 horas',
-    location: 'San Isidro, Lima',
-    content:
-      '¿Alguien recomienda un buen diseñador de interiores para remodelar un local comercial en San Isidro? Buscamos referencias de profesionales locales con experiencia en retail moderno y habilitación rápida. ¡Agradezco sus contactos!',
-    category: 'ml-graph',
-    tags: ['#DiseñoInteriores', '#SanIsidroComercial', '#NegociosLocales'],
-    likes: 18,
-    liked: false,
-    bookmarked: false,
-    comments: [
-      {
-        id: 'c-3',
-        author: 'Muebles & Diseño',
-        authorAvatar:
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuAdUConcX2iKBR0Cby8eYe3xaPphMY03YIwR75SH20THF7c9Go4mrxUcfMTTQFABav0sDOjm8G7KjNaZjI-UkDMPWV0Cc2ijJ4rDaADZVLKChwwsC6q5jrUqnMWklwyAM8Wqn-xGSHRPtEnMjFDw9rSQd9fCya1Dcj3LEEeyz-eJpNBjKj-Mmv0JTPHrdXdHkMQMlIEKPqfkPwBPqNMRnmMs9K31Yo1EFBRko7TjdA',
-        isVerified: true,
-        text: 'Hola Mariana, nosotros nos especializamos en diseño y mobiliario comercial en Lima. Puedes contactarnos por chat y te enviamos nuestro catálogo.',
-        time: 'Hace 45 min',
-      },
-    ],
-  },
-];
+const INITIAL_POSTS: Post[] = [];
 
 const STORAGE_KEY_POSTS = 'promexa_feed_posts_v1';
+const STORAGE_KEY_FRIENDS = 'promexa_friends_map_v1';
+
+interface SuggestedContact {
+  id: string;
+  name: string;
+  handle: string;
+  avatar: string;
+  isVerified: boolean;
+  mutualCount: number;
+  tags: string[];
+  location: string;
+}
+
+const SUGGESTED_CONTACTS: SuggestedContact[] = [];
 
 export default function HomePage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const router = useRouter();
 
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
   const [activeTab, setActiveTab] = useState<'ml-graph' | 'following' | 'local'>('ml-graph');
   const [postContent, setPostContent] = useState('');
-  const [hasAttachedPhoto, setHasAttachedPhoto] = useState(false);
+  const postInputRef = React.useRef<HTMLTextAreaElement>(null);
+  React.useEffect(() => {
+    const input = postInputRef.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(Math.max(input.scrollHeight, 180), 420)}px`;
+  }, [postContent]);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const hasAttachedPhoto = Boolean(photo);
+  const [publishing, setPublishing] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const uploadedPhoto = React.useRef<{ file: File; url: string } | null>(null);
   const [hasAttachedProduct, setHasAttachedProduct] = useState(false);
   const [postVisibility, setPostVisibility] = useState('Público');
   const [showVisibilityMenu, setShowVisibilityMenu] = useState(false);
+
+  // Modal de perfil interactivo
+  const [selectedProfile, setSelectedProfile] = useState<UserProfileModalData | null>(null);
+  const presence = usePresence([user?.id, ...posts.map(post => post.authorId), selectedProfile?.id, ...SUGGESTED_CONTACTS.map(contact => contact.id)]);
+
+  // Amigos persistidos
+  const [friendsMap, setFriendsMap] = useState<{ [name: string]: boolean }>({});
 
   // Comments input by post ID
   const [commentInputs, setCommentInputs] = useState<{ [postId: string]: string }>({});
@@ -155,88 +131,105 @@ export default function HomePage() {
     }
   };
 
-  // Carga inicial persistente de publicaciones
+  // Carga inicial persistente de amigos
   React.useEffect(() => {
     try {
-      const local = localStorage.getItem(STORAGE_KEY_POSTS);
-      if (local) {
-        const parsed = JSON.parse(local);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Limpiar hashtags automáticos (#ComunidadPromexa, #Novedades) de pruebas previas
-          const cleaned = parsed.map((p: Post) => ({
-            ...p,
-            tags: (p.tags || []).filter(
-              (t: string) => t !== '#ComunidadPromexa' && t !== '#Novedades'
-            ),
-          }));
-          setPosts(cleaned);
-          localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(cleaned));
-          return;
-        }
-      }
-      // Si no hay datos guardados aún, persistir la lista inicial
-      localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(INITIAL_POSTS));
-      setPosts(INITIAL_POSTS);
-    } catch {
-      setPosts(INITIAL_POSTS);
-    }
+      localStorage.removeItem(STORAGE_KEY_POSTS);
+      localStorage.removeItem(STORAGE_KEY_FRIENDS);
+      setFriendsMap({});
+    } catch {}
   }, []);
+
+  // Carga inicial de publicaciones desde el backend
+  React.useEffect(() => {
+    if (!token) return;
+    const fetchPosts = async () => {
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+        const res = await fetch(`${backendUrl}/posts?category=${activeTab}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setPosts(data);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching posts from backend:', error);
+      }
+
+      // Si el backend falla, mostrar array vacío
+      setPosts([]);
+    };
+
+    fetchPosts();
+  }, [activeTab, token]);
 
   // Crear nueva publicación
   const handleCreatePost = async () => {
-    if (!postContent.trim() && !hasAttachedPhoto && !hasAttachedProduct) return;
+    if (publishing || (!postContent.trim() && !hasAttachedPhoto && !hasAttachedProduct)) return;
+    setPublishing(true); setUploadError('');
+    try {
+    let mediaUrl: string | undefined;
+    if (photo) {
+      if (uploadedPhoto.current?.file !== photo) {
+        uploadedPhoto.current = { file: photo, url: await uploadImage(photo, 'post', token) };
+      }
+      mediaUrl = uploadedPhoto.current.url;
+    }
 
     // Solo los hashtags que el usuario escriba explícitamente en el contenido
     const matches = postContent.match(/#[a-zA-Z0-9_áéíóúÁÉÍÓÚñÑ]+/g) || [];
     const userTags = Array.from(new Set(matches));
 
-    const newPost: Post = {
-      id: `post-${Date.now()}`,
-      author: user?.name || 'Carlos Mendoza',
-      authorHandle: `@${(user?.name || 'usuario').toLowerCase().replace(/\s+/g, '')}`,
-      authorAvatar:
-        user?.avatar ||
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuAH3UDaH5S4ho_6H4oKGGbzvRDc6LorHWo-1pfiUJf12W1Auj4lfoQJv49kAmTodxRQ2qjn9Gw3OCKEgNjPAaYs7bWaSTa1ib_zIwwkI7_Q-YO8vrIQcqc93EcFCKTlM8e8icVlD5kHDDY2RToEXmganGu3acS1w16yAXHMOQI9YlC8xg_qHtttlbMKoseK0hFBvd51mYVAjPwV2omGzRF7l9YtdZHuawkgmcCUf4Q',
+    const postData = {
+      authorId: user?.id || '',
+      authorAvatar: user?.avatar || '',
       isVerified: user?.isVerified ?? true,
-      time: 'Hace un momento',
-      location: 'Lima, Perú',
       content: postContent.trim(),
-      category: 'following',
+      mediaUrl,
+      hasProduct: hasAttachedProduct,
       tags: userTags,
-      mediaUrl: hasAttachedPhoto
-        ? 'https://lh3.googleusercontent.com/aida-public/AB6AXuBg21NIl8VdFPryF6IWY-blXSc13SLNb4Sl7Q9l8EWc2PLSRgFGRh0sujb6aUCKCUYPDPiOiITsYoFh-jk5Kn13VWgSeKG-xa-eUIQ_KOQZoBC4B7-zyLcvi6Jcv1PM5I-q2XaynJA_RoFH4LNb9KCKa6L4xSiHeqtQjEh4MM_aAXm1I2VFbn6GKlfDYzJOQjAwai280GrID5emqvvty-Skt8vBumoZrOc2D6TQrlo'
-        : undefined,
-      linkedProduct: hasAttachedProduct
-        ? {
-            name: 'Producto Destacado Promexa',
-            price: 65.0,
-            badge: 'Disponible',
-            stock: 'Stock: Disponible',
-            details: 'Producto verificado por comerciante local',
-            image:
-              'https://lh3.googleusercontent.com/aida-public/AB6AXuBg21NIl8VdFPryF6IWY-blXSc13SLNb4Sl7Q9l8EWc2PLSRgFGRh0sujb6aUCKCUYPDPiOiITsYoFh-jk5Kn13VWgSeKG-xa-eUIQ_KOQZoBC4B7-zyLcvi6Jcv1PM5I-q2XaynJA_RoFH4LNb9KCKa6L4xSiHeqtQjEh4MM_aAXm1I2VFbn6GKlfDYzJOQjAwai280GrID5emqvvty-Skt8vBumoZrOc2D6TQrlo',
-          }
-        : undefined,
-      likes: 0,
-      liked: false,
-      bookmarked: false,
-      comments: [],
     };
 
-    const updated = [newPost, ...posts];
-    persistPosts(updated);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const res = await fetch(`${backendUrl}/posts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(postData),
+      });
 
-    // Sync con API en segundo plano
-    fetch('/api/posts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newPost),
-    }).catch(() => {});
+      if (res.ok) {
+        const data = await res.json();
+        const newPost: Post = {
+          ...data,
+          time: 'Hace un momento',
+          comments: [],
+        };
+        const updated = [newPost, ...posts];
+        setPosts(updated);
+        try {
+          localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(updated));
+        } catch (e) {
+          console.error('Error saving posts to localStorage', e);
+        }
+        setPostContent('');
+        setPhoto(null); uploadedPhoto.current = null;
+        setHasAttachedProduct(false);
+        showToast('¡Tu publicación ha sido compartida exitosamente!');
+        return;
+      }
+    } catch (error) {
+      console.error('Error creating post:', error);
+    }
 
-    setPostContent('');
-    setHasAttachedPhoto(false);
-    setHasAttachedProduct(false);
-    showToast('¡Tu publicación ha sido compartida y guardada exitosamente!');
+    setUploadError('No se pudo publicar. Verifica tu sesion y la conexion al servidor.');
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'No se pudo subir la imagen');
+    } finally { setPublishing(false); }
   };
 
   // Toggle Like con persistencia
@@ -288,10 +281,8 @@ export default function HomePage() {
 
     const newComment: Comment = {
       id: `c-${Date.now()}`,
-      author: user?.name || 'Carlos Mendoza',
-      authorAvatar:
-        user?.avatar ||
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuAH3UDaH5S4ho_6H4oKGGbzvRDc6LorHWo-1pfiUJf12W1Auj4lfoQJv49kAmTodxRQ2qjn9Gw3OCKEgNjPAaYs7bWaSTa1ib_zIwwkI7_Q-YO8vrIQcqc93EcFCKTlM8e8icVlD5kHDDY2RToEXmganGu3acS1w16yAXHMOQI9YlC8xg_qHtttlbMKoseK0hFBvd51mYVAjPwV2omGzRF7l9YtdZHuawkgmcCUf4Q',
+      author: user?.name || 'Usuario',
+      authorAvatar: user?.avatar || '',
       isVerified: user?.isVerified ?? true,
       text,
       time: 'Hace un momento',
@@ -321,8 +312,37 @@ export default function HomePage() {
     });
   };
 
+  // Toggle Amigos
+  const handleToggleFriend = (name: string) => {
+    setFriendsMap((prev) => {
+      const isFriend = !prev[name];
+      const updated = { ...prev, [name]: isFriend };
+      try {
+        localStorage.setItem(STORAGE_KEY_FRIENDS, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Error saving friends:', e);
+      }
+      showToast(isFriend ? `¡Has agregado a ${name} a tus amigos!` : `Eliminaste a ${name} de tus amigos`);
+      return updated;
+    });
+  };
+
+  // Iniciar conversación directa con un usuario o negocio
+  const handleStartChat = (name: string, avatar: string, isVerified: boolean, id?: string) => {
+    setSelectedProfile(null);
+    const params = new URLSearchParams({
+      user: name,
+      avatar: avatar,
+      verified: isVerified ? 'true' : 'false',
+    });
+    if (id) params.set('userId', id);
+    router.push(`/mensajes?${params.toString()}`);
+  };
+
   // Filtrado de publicaciones
-  const filteredPosts = posts.filter((p) => {
+  const filteredPosts = posts.map(post => post.authorId === user?.id
+    ? { ...post, author: user.name, authorAvatar: user.avatar || '' }
+    : post).filter((p) => {
     if (activeTab === 'following') return p.category === 'following';
     if (activeTab === 'local') return p.category === 'local' || !!p.linkedProduct;
     return true; // 'ml-graph' shows everything
@@ -345,23 +365,23 @@ export default function HomePage() {
           <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
             <div className="flex items-center gap-space-sm mb-space-sm">
               <div className="relative shrink-0">
-                <img
-                  alt={user?.name || 'Usuario'}
-                  className="w-12 h-12 rounded-full object-cover ring-2 ring-primary/20"
-                  src={
-                    user?.avatar ||
-                    'https://lh3.googleusercontent.com/aida-public/AB6AXuAH3UDaH5S4ho_6H4oKGGbzvRDc6LorHWo-1pfiUJf12W1Auj4lfoQJv49kAmTodxRQ2qjn9Gw3OCKEgNjPAaYs7bWaSTa1ib_zIwwkI7_Q-YO8vrIQcqc93EcFCKTlM8e8icVlD5kHDDY2RToEXmganGu3acS1w16yAXHMOQI9YlC8xg_qHtttlbMKoseK0hFBvd51mYVAjPwV2omGzRF7l9YtdZHuawkgmcCUf4Q'
-                  }
-                />
-                <span
-                  className="absolute bottom-0 right-0 w-3 h-3 bg-[#16A34A] rounded-full ring-2 ring-surface-container-lowest"
-                  title="En línea"
-                />
+                {user?.avatar ? (
+                  <UserAvatar
+                    alt={user?.name || 'Usuario'}
+                    className="w-12 h-12 rounded-full object-cover ring-2 ring-primary/20"
+                    src={user.avatar}
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center ring-2 ring-primary/20">
+                    <span className="material-symbols-outlined text-primary text-[24px]">person</span>
+                  </div>
+                )}
+                <PresenceDot online={user ? presence[user.id] : null} className="absolute bottom-0 right-0 w-3 h-3 ring-2 ring-white" />
               </div>
               <div className="flex flex-col min-w-0 flex-1">
                 <div className="flex items-center gap-1">
                   <span className="font-headline-sm text-headline-sm text-on-surface truncate font-semibold">
-                    {user?.name || 'Carlos Mendoza'}
+                    {user?.name || 'Usuario'}
                   </span>
                   {user?.isVerified && (
                     <span
@@ -374,7 +394,7 @@ export default function HomePage() {
                   )}
                 </div>
                 <span className="font-caption text-caption text-outline truncate">
-                  {user?.email || 'carlos@promexa.com'} · {user?.profileType === 'business' ? 'Negocio Local' : 'Usuario'}
+                  {user?.email || ''} · {user?.profileType === 'business' ? 'Negocio Local' : 'Usuario'}
                 </span>
               </div>
             </div>
@@ -382,22 +402,23 @@ export default function HomePage() {
             <div className="grid grid-cols-2 gap-space-xs py-space-sm my-space-xs bg-surface-container-low rounded-lg text-center">
               <div className="flex flex-col">
                 <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
-                  {posts.length}
+                  {posts.filter((post) => post.authorId === user?.id).length}
                 </span>
-                <span className="font-label-sm text-label-sm text-on-surface-variant">Publicaciones</span>
+                <span className="font-label-sm text-label-sm text-on-surface-variant">Posts</span>
               </div>
-              <div className="flex flex-col">
-                <span className="font-headline-sm text-headline-sm text-primary font-bold">1.4k</span>
-                <span className="font-label-sm text-label-sm text-on-surface-variant">Seguidores</span>
+              <div className="flex flex-col border-x border-surface-container/60">
+                <span className="font-headline-sm text-headline-sm text-primary font-bold">
+                  {Object.values(friendsMap).filter(Boolean).length}
+                </span>
+                <span className="font-label-sm text-label-sm text-on-surface-variant">Amigos</span>
               </div>
+
             </div>
 
-            <Link
-              href="/marketplace"
-              className="mt-space-xs block w-full text-center py-2 rounded-lg bg-surface-container text-primary font-label-md text-label-md hover:bg-surface-container-high transition-colors font-semibold"
-            >
-              Gestionar Perfil Comercial
-            </Link>
+            <button type="button" onClick={() => router.push('/perfil')}
+              className="mt-space-xs block w-full text-center py-2 rounded-lg bg-surface-container text-primary font-label-md hover:bg-surface-container-high font-semibold">
+              Editar perfil
+            </button>
           </div>
 
           {/* Menú de Enlaces Rápidos */}
@@ -425,7 +446,7 @@ export default function HomePage() {
                 <span className="material-symbols-outlined text-outline text-[20px]">dynamic_feed</span>
                 <span>Mis Publicaciones</span>
               </div>
-              <span className="font-caption text-caption text-outline">{posts.length}</span>
+              <span className="font-caption text-caption text-outline">{posts.filter((post) => post.authorId === user?.id).length}</span>
             </Link>
 
             <Link
@@ -436,9 +457,6 @@ export default function HomePage() {
                 <span className="material-symbols-outlined text-outline text-[20px]">storefront</span>
                 <span>Mis Productos</span>
               </div>
-              <span className="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-[#DCFCE7] text-[#16A34A] font-medium">
-                3 activos
-              </span>
             </Link>
 
             <Link
@@ -449,7 +467,6 @@ export default function HomePage() {
                 <span className="material-symbols-outlined text-outline text-[20px]">chat</span>
                 <span>Mensajes Directos</span>
               </div>
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
             </Link>
 
             <button
@@ -481,19 +498,24 @@ export default function HomePage() {
           {/* Caja de Creación de Publicación */}
           <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm border border-surface-container/60">
             <div className="flex items-start gap-space-sm mb-space-sm">
-              <img
-                alt={user?.name || 'Avatar'}
-                className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-primary/20"
-                src={
-                  user?.avatar ||
-                  'https://lh3.googleusercontent.com/aida-public/AB6AXuAH3UDaH5S4ho_6H4oKGGbzvRDc6LorHWo-1pfiUJf12W1Auj4lfoQJv49kAmTodxRQ2qjn9Gw3OCKEgNjPAaYs7bWaSTa1ib_zIwwkI7_Q-YO8vrIQcqc93EcFCKTlM8e8icVlD5kHDDY2RToEXmganGu3acS1w16yAXHMOQI9YlC8xg_qHtttlbMKoseK0hFBvd51mYVAjPwV2omGzRF7l9YtdZHuawkgmcCUf4Q'
-                }
-              />
+              {user?.avatar ? (
+                <UserAvatar
+                  alt={user?.name || 'Avatar'}
+                  className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-primary/20"
+                  src={user.avatar}
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 ring-1 ring-primary/20">
+                  <span className="material-symbols-outlined text-primary text-[20px]">person</span>
+                </div>
+              )}
               <div className="flex-1">
                 <textarea
-                  className="w-full bg-surface-container-low focus:bg-surface-container-lowest rounded-lg p-space-sm font-body-md text-body-md text-on-surface placeholder:text-outline resize-none focus:outline-none focus:ring-1 focus:ring-primary-container transition-all"
+                  ref={postInputRef}
+                  aria-label="Contenido de la publicacion"
+                  className="min-h-[180px] max-h-[420px] overflow-y-auto w-full bg-surface-container-low focus:bg-surface-container-lowest rounded-lg p-space-sm font-body-md text-body-md text-on-surface placeholder:text-outline resize-none focus:outline-none focus:ring-1 focus:ring-primary-container transition-all"
                   placeholder="¿Qué novedades tienes hoy para tu comunidad o negocio?"
-                  rows={2}
+                  rows={6}
                   value={postContent}
                   onChange={(e) => setPostContent(e.target.value)}
                 />
@@ -519,7 +541,7 @@ export default function HomePage() {
                       type="button"
                       className="text-outline hover:text-red-600 transition-colors"
                       onClick={() => {
-                        setHasAttachedPhoto(false);
+                        setPhoto(null); uploadedPhoto.current = null;
                         setHasAttachedProduct(false);
                       }}
                     >
@@ -532,20 +554,9 @@ export default function HomePage() {
 
             <div className="flex flex-wrap items-center justify-between gap-space-sm pt-space-xs border-t border-surface-container/40">
               <div className="flex items-center gap-1 sm:gap-2">
-                <button
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition-colors font-label-sm text-label-sm ${
-                    hasAttachedPhoto
-                      ? 'bg-primary-container/10 text-primary-container font-semibold'
-                      : 'text-on-surface-variant hover:bg-surface-container-high'
-                  }`}
-                  type="button"
-                  onClick={() => setHasAttachedPhoto(!hasAttachedPhoto)}
-                >
-                  <span className="material-symbols-outlined text-primary-container text-[18px]">
-                    image
-                  </span>
-                  <span>Foto/Video</span>
-                </button>
+                <ImagePicker label="Adjuntar foto" file={photo} maxMB={10} disabled={publishing}
+                  onChange={setPhoto} onRemove={() => { setPhoto(null); uploadedPhoto.current = null; }} />
+
 
                 <button
                   className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition-colors font-label-sm text-label-sm ${
@@ -596,7 +607,7 @@ export default function HomePage() {
 
               <button
                 className="h-9 px-5 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-body-md-medium text-body-md-medium transition-colors shadow-sm flex items-center gap-1.5 ml-auto active:scale-95 disabled:opacity-50"
-                disabled={!postContent.trim() && !hasAttachedPhoto && !hasAttachedProduct}
+                disabled={publishing || (!postContent.trim() && !hasAttachedPhoto && !hasAttachedProduct)}
                 type="button"
                 onClick={handleCreatePost}
               >
@@ -659,6 +670,7 @@ export default function HomePage() {
             </button>
           </div>
 
+          {uploadError && <p role="alert" className="text-sm text-red-700">{uploadError}</p>}
           {/* LISTA DINÁMICA DE PUBLICACIONES */}
           {filteredPosts.map((post) => (
             <article
@@ -668,19 +680,44 @@ export default function HomePage() {
               {/* Cabecera del Post */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-space-sm">
-                  <div className="relative">
-                    <img
+                  <div
+                    className="relative cursor-pointer group"
+                    onClick={() =>
+                      setSelectedProfile({
+                        id: post.authorId,
+                        name: post.author,
+                        handle: post.authorHandle,
+                        avatar: post.authorAvatar,
+                        isVerified: post.isVerified,
+                        location: post.location,
+                        tags: post.tags,
+                      })
+                    }
+                    title={`Click para ver perfil de ${post.author}, agregar amigo o conversar`}
+                  >
+                    <UserAvatar
                       alt={post.author}
-                      className="w-11 h-11 rounded-full object-cover ring-1 ring-primary/20"
+                      className="w-11 h-11 rounded-full object-cover ring-1 ring-primary/20 group-hover:ring-2 group-hover:ring-primary group-hover:scale-105 transition-all shadow-xs"
                       src={post.authorAvatar}
                     />
-                    {post.isVerified && (
-                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-[#16A34A] rounded-full ring-2 ring-surface-container-lowest" />
-                    )}
+                    <PresenceDot online={presence[post.authorId]} className="absolute bottom-0 right-0 w-3 h-3 ring-2 ring-white" />
                   </div>
                   <div className="flex flex-col">
                     <div className="flex items-center gap-1">
-                      <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                      <span
+                        className="font-headline-sm text-headline-sm text-on-surface font-semibold hover:text-primary cursor-pointer transition-colors"
+                        onClick={() =>
+                          setSelectedProfile({
+                            id: post.authorId,
+                        name: post.author,
+                            handle: post.authorHandle,
+                            avatar: post.authorAvatar,
+                            isVerified: post.isVerified,
+                            location: post.location,
+                            tags: post.tags,
+                          })
+                        }
+                      >
                         {post.author}
                       </span>
                       {post.isVerified && (
@@ -720,8 +757,8 @@ export default function HomePage() {
 
               {/* Imagen opcional adjunta */}
               {post.mediaUrl && (
-                <div className="rounded-xl overflow-hidden bg-surface-container-low max-h-80 shadow-inner">
-                  <img alt="Media adjunta" className="w-full h-full object-cover" src={post.mediaUrl} />
+                <div className="rounded-xl overflow-hidden bg-surface-container-low shadow-inner">
+                  <img alt="Imagen de la publicacion" className="block w-full h-auto object-contain" src={post.mediaUrl} />
                 </div>
               )}
 
@@ -760,7 +797,7 @@ export default function HomePage() {
                         <span className="font-caption text-caption text-outline">/ unidad</span>
                       </div>
                       <Link
-                        href="/mensajes"
+                        href={`/mensajes?userId=${encodeURIComponent(post.authorId)}`}
                         className="h-9 px-4 rounded-lg bg-[#F28C28] hover:bg-tertiary-container text-on-primary font-body-md-medium text-body-md-medium shadow-sm transition-colors flex items-center gap-1.5 font-semibold"
                       >
                         <span className="material-symbols-outlined text-[18px]">chat</span>
@@ -844,15 +881,36 @@ export default function HomePage() {
               <div className="pt-space-sm flex flex-col gap-space-sm bg-surface-container-low/50 -mx-space-md -mb-space-md p-space-md rounded-b-xl border-t border-surface-container/40">
                 {post.comments.map((comment) => (
                   <div key={comment.id} className="flex items-start gap-space-sm animate-fadeIn">
-                    <img
+                    <UserAvatar
                       alt={comment.author}
-                      className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-primary/20"
+                      className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-primary/20 cursor-pointer hover:ring-2 hover:ring-primary hover:scale-105 transition-all shadow-xs"
                       src={comment.authorAvatar}
+                      onClick={() =>
+                        setSelectedProfile({
+                          name: comment.author,
+                          avatar: comment.authorAvatar,
+                          isVerified: comment.isVerified,
+                          location: 'Lima, Perú',
+                          tags: ['Comunidad Promexa'],
+                        })
+                      }
+                      title={`Click para ver perfil de ${comment.author}, agregar o conversar`}
                     />
                     <div className="flex-1 bg-surface-container-lowest rounded-xl p-space-sm shadow-xs border border-surface-container/50">
                       <div className="flex items-center justify-between mb-0.5">
                         <div className="flex items-center gap-1">
-                          <span className="font-body-md-medium text-body-md-medium text-on-surface font-semibold">
+                          <span
+                            className="font-body-md-medium text-body-md-medium text-on-surface font-semibold hover:text-primary cursor-pointer transition-colors"
+                            onClick={() =>
+                              setSelectedProfile({
+                                name: comment.author,
+                                avatar: comment.authorAvatar,
+                                isVerified: comment.isVerified,
+                                location: 'Lima, Perú',
+                                tags: ['Comunidad Promexa'],
+                              })
+                            }
+                          >
                             {comment.author}
                           </span>
                           {comment.isVerified && (
@@ -875,14 +933,17 @@ export default function HomePage() {
 
                 {/* Caja de entrada interactiva para nuevo comentario */}
                 <div className="flex items-center gap-2 pt-space-xs mt-1">
-                  <img
-                    alt={user?.name || 'Yo'}
-                    className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-primary/20"
-                    src={
-                      user?.avatar ||
-                      'https://lh3.googleusercontent.com/aida-public/AB6AXuAH3UDaH5S4ho_6H4oKGGbzvRDc6LorHWo-1pfiUJf12W1Auj4lfoQJv49kAmTodxRQ2qjn9Gw3OCKEgNjPAaYs7bWaSTa1ib_zIwwkI7_Q-YO8vrIQcqc93EcFCKTlM8e8icVlD5kHDDY2RToEXmganGu3acS1w16yAXHMOQI9YlC8xg_qHtttlbMKoseK0hFBvd51mYVAjPwV2omGzRF7l9YtdZHuawkgmcCUf4Q'
-                    }
-                  />
+                  {user?.avatar ? (
+                    <UserAvatar
+                      alt={user?.name || 'Yo'}
+                      className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-primary/20"
+                      src={user.avatar}
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 ring-1 ring-primary/20">
+                      <span className="material-symbols-outlined text-primary text-[16px]">person</span>
+                    </div>
+                  )}
                   <div className="flex-1 relative flex items-center">
                     <input
                       className="w-full h-10 pl-3 pr-10 rounded-lg bg-surface-container-lowest border border-outline-variant/50 font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container transition-colors shadow-xs"
@@ -928,171 +989,93 @@ export default function HomePage() {
               Sugerencias basadas en tu red local (Neo4j Graph Engine)
             </p>
 
-            <div className="flex flex-col gap-space-md mt-space-xs">
-              {/* Sugerencia 1 */}
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <img
-                      alt="Andrea Delgado"
-                      className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-primary/20"
-                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFHa94r0FSTDaE2vj18vlwbq3T6bK3uA2DN2Kn-95HvulWA_SAY5dKfwqpkAxRk81u4wLZbVeQjPa9Jbqm7zhOusUxQhl2QkuaG9rZ5TdS4HY8r2tZQVgXfGMy2FXv7v76I9gCvJ4V0QeSqUVJjWALdzTmGeVyF24h8NgoXT52eE8CKox_pgRk6DDfso8WUBkTFbohVRGcUPSiWHBXvKfp_zzRoJWe-qj9S-OR_D0"
-                    />
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-body-md-medium text-body-md-medium text-on-surface truncate font-semibold">
-                        Andrea Delgado
-                      </span>
-                      <span className="font-caption text-caption text-outline truncate">
-                        3 contactos en común
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    className={`h-8 px-3 rounded-lg font-label-md text-label-md shrink-0 transition-colors shadow-xs font-semibold ${
-                      followedUsers['u1']
-                        ? 'bg-surface-container text-on-surface'
-                        : 'bg-primary-container hover:bg-primary text-on-primary'
-                    }`}
-                    type="button"
-                    onClick={() => handleToggleFollow('u1', 'Andrea Delgado')}
-                  >
-                    {followedUsers['u1'] ? 'Siguiendo' : 'Seguir'}
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1 pl-12">
-                  <span className="px-2 py-0.5 rounded-full bg-surface-container font-caption text-caption text-on-surface-variant">
-                    Gastronomía
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-surface-container font-caption text-caption text-on-surface-variant">
-                    Comercio
-                  </span>
-                </div>
-              </div>
-
-              {/* Sugerencia 2 */}
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <img
-                      alt="Rodrigo Paz"
-                      className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-primary/20"
-                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGdbTJTJdAz3KTExVy5vUDq3BsHO2CyijPP91hFPKEP0-DAE9Dw8tSNhM5oCjI6WRNc4ytbwT2ovajiMzQfvtHLJIRHpGy1aa6K0dKCHmQTISb7jkpfBr3mZKRJNtUM8h-98T16hZ92wNrPE45t4LBClk5-hpBPtKNDj_h0oX2RYdKVooWG1Rc2Af_y6V_MQyf5F4KJQSTJc0o2F9rau3-OWS9hkdbvScJQn1IIWw"
-                    />
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-body-md-medium text-body-md-medium text-on-surface truncate font-semibold">
-                        Rodrigo Paz
-                      </span>
-                      <span className="font-caption text-caption text-outline truncate">
-                        5 contactos en común
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    className={`h-8 px-3 rounded-lg font-label-md text-label-md shrink-0 transition-colors shadow-xs font-semibold ${
-                      followedUsers['u2']
-                        ? 'bg-surface-container text-on-surface'
-                        : 'bg-primary-container hover:bg-primary text-on-primary'
-                    }`}
-                    type="button"
-                    onClick={() => handleToggleFollow('u2', 'Rodrigo Paz')}
-                  >
-                    {followedUsers['u2'] ? 'Siguiendo' : 'Seguir'}
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1 pl-12">
-                  <span className="px-2 py-0.5 rounded-full bg-surface-container font-caption text-caption text-on-surface-variant">
-                    Logística
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-surface-container font-caption text-caption text-on-surface-variant">
-                    Distribución
-                  </span>
-                </div>
-              </div>
-
-              {/* Sugerencia 3 */}
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <img
-                      alt="Valeria Thorne"
-                      className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-primary/20"
-                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9xAepqFbzjM3s1s8cJRVo4F_4O5CbqKY7xIJlwE07ENZrE83fBIeaKD4JaKfu2OBoqzqVD65Ee3dr-qFp24pt20NjFSNMUaWidgOCwvGmzAqM45BD9WKltX5oWdraE3jzQdpEnkrpPFrreVjbBBZzE2nZpvQKcYfJp2zMvalJ_dGmW6mCcUdpkchuUAEmfjgoqGemixQT1wJMl_xk4bz_GJFjFgiWbPJeEVV498k"
-                    />
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-1">
-                        <span className="font-body-md-medium text-body-md-medium text-on-surface truncate font-semibold">
-                          Valeria Thorne
-                        </span>
-                        <span className="material-symbols-outlined text-primary-container text-[14px]">
-                          verified
+            <div className="flex flex-col gap-space-sm mt-space-xs">
+              {SUGGESTED_CONTACTS.map((contact) => (
+                <div
+                  key={contact.id}
+                  className="flex flex-col gap-1.5 p-2 rounded-xl hover:bg-surface-container-low transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div
+                      className="flex items-center gap-2.5 min-w-0 cursor-pointer group flex-1"
+                      onClick={() =>
+                        setSelectedProfile({
+                          name: contact.name,
+                          handle: contact.handle,
+                          avatar: contact.avatar,
+                          isVerified: contact.isVerified,
+                          location: contact.location,
+                          mutualCount: contact.mutualCount,
+                          tags: contact.tags,
+                        })
+                      }
+                      title={`Click para ver perfil de ${contact.name}, agregar o conversar`}
+                    >
+                      <div className="relative shrink-0">
+                        <UserAvatar
+                          alt={contact.name}
+                          className="w-10 h-10 rounded-full object-cover ring-1 ring-primary/20 group-hover:ring-2 group-hover:ring-primary group-hover:scale-105 transition-all shadow-xs"
+                          src={contact.avatar}
+                        />
+                        <PresenceDot online={presence[contact.id]} className="absolute -bottom-0.5 -right-0.5 w-3 h-3 ring-2 ring-white" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-1">
+                          <span className="font-body-md-medium text-body-md-medium text-on-surface truncate font-semibold group-hover:text-primary transition-colors">
+                            {contact.name}
+                          </span>
+                          {contact.isVerified && (
+                            <span className="material-symbols-outlined text-primary-container text-[14px]">
+                              verified
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-caption text-caption text-outline truncate">
+                          {contact.mutualCount} contactos en común
                         </span>
                       </div>
-                      <span className="font-caption text-caption text-outline truncate">
-                        2 contactos en común
-                      </span>
                     </div>
-                  </div>
-                  <button
-                    className={`h-8 px-3 rounded-lg font-label-md text-label-md shrink-0 transition-colors shadow-xs font-semibold ${
-                      followedUsers['u3']
-                        ? 'bg-surface-container text-on-surface'
-                        : 'bg-primary-container hover:bg-primary text-on-primary'
-                    }`}
-                    type="button"
-                    onClick={() => handleToggleFollow('u3', 'Valeria Thorne')}
-                  >
-                    {followedUsers['u3'] ? 'Siguiendo' : 'Seguir'}
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1 pl-12">
-                  <span className="px-2 py-0.5 rounded-full bg-surface-container font-caption text-caption text-on-surface-variant">
-                    Textiles
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-surface-container font-caption text-caption text-on-surface-variant">
-                    Mayorista
-                  </span>
-                </div>
-              </div>
 
-              {/* Sugerencia 4 */}
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <img
-                      alt="Javier Huamán"
-                      className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-primary/20"
-                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuArkPGkiepJAni4zLi3EXHLRAortuA4Ru8S7NdvEB5RU7DfEOKg4wsVNHkxHzseyod99DtucajnyNrhYLfUbW7QnD7UWUIy1RxWVMRnuquHiTrOuQJzbJEBFY9-_mDD0YuVN039WU9Ec5Vb01RV-P4WRmnpQYENeG2btQ3CD4qFZ33cVG7dbgRLW8DLdFs8SsB5IKV7vbzO_U5eJAuqlnIMXan9StKGniQIpsfCyc8"
-                    />
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-body-md-medium text-body-md-medium text-on-surface truncate font-semibold">
-                        Javier Huamán
-                      </span>
-                      <span className="font-caption text-caption text-outline truncate">
-                        6 contactos en común
-                      </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        className={`h-8 px-2.5 rounded-lg font-label-md text-label-md transition-all shadow-xs font-semibold flex items-center gap-1 ${
+                          friendsMap[contact.name]
+                            ? 'bg-[#DCFCE7] text-[#16A34A] hover:bg-[#bbf7d0]'
+                            : 'bg-primary-container hover:bg-primary text-on-primary'
+                        }`}
+                        type="button"
+                        onClick={() => handleToggleFriend(contact.name)}
+                        title={friendsMap[contact.name] ? 'En tus amigos (Click para cambiar)' : `Agregar a ${contact.name}`}
+                      >
+                        <span className="material-symbols-outlined text-[15px]">
+                          {friendsMap[contact.name] ? 'how_to_reg' : 'person_add'}
+                        </span>
+                        <span>{friendsMap[contact.name] ? 'Amigos' : 'Agregar'}</span>
+                      </button>
+
+                      <button
+                        className="w-8 h-8 rounded-lg bg-surface-container hover:bg-primary/10 text-primary flex items-center justify-center transition-colors"
+                        type="button"
+                        onClick={() => handleStartChat(contact.name, contact.avatar, contact.isVerified, contact.id)}
+                        title={`Conversar con ${contact.name}`}
+                      >
+                        <span className="material-symbols-outlined text-[17px]">chat</span>
+                      </button>
                     </div>
                   </div>
-                  <button
-                    className={`h-8 px-3 rounded-lg font-label-md text-label-md shrink-0 transition-colors shadow-xs font-semibold ${
-                      followedUsers['u4']
-                        ? 'bg-surface-container text-on-surface'
-                        : 'bg-primary-container hover:bg-primary text-on-primary'
-                    }`}
-                    type="button"
-                    onClick={() => handleToggleFollow('u4', 'Javier Huamán')}
-                  >
-                    {followedUsers['u4'] ? 'Siguiendo' : 'Seguir'}
-                  </button>
+
+                  <div className="flex flex-wrap gap-1 pl-12">
+                    {contact.tags.map((tag, i) => (
+                      <span
+                        key={i}
+                        className="px-2 py-0.5 rounded-full bg-surface-container font-caption text-caption text-on-surface-variant"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1 pl-12">
-                  <span className="px-2 py-0.5 rounded-full bg-surface-container font-caption text-caption text-on-surface-variant">
-                    Tecnología
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-surface-container font-caption text-caption text-on-surface-variant">
-                    Finanzas
-                  </span>
-                </div>
-              </div>
+              ))}
             </div>
 
             <button
@@ -1126,6 +1109,144 @@ export default function HomePage() {
           </div>
         </aside>
       </div>
+
+      {/* Modal de Perfil de Usuario para Agregar Amigos y Conversar */}
+      {selectedProfile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setSelectedProfile(null)}
+        >
+          <div
+            className="bg-surface-container-lowest w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-surface-container/60 transform transition-all animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabecera con portada decorativa y botón cerrar */}
+            <div className="h-28 bg-gradient-to-r from-primary-container via-primary to-primary-container relative p-3 flex justify-end items-start">
+              <button
+                className="w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center transition-colors backdrop-blur-xs"
+                type="button"
+                onClick={() => setSelectedProfile(null)}
+                title="Cerrar"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            {/* Contenido del Perfil */}
+            <div className="px-6 pb-6 pt-0 relative flex flex-col">
+              {/* Avatar grande con overlap */}
+              <div className="flex justify-between items-end -mt-12 mb-3">
+                <div className="relative">
+                  <UserAvatar
+                    alt={selectedProfile.name}
+                    className="w-24 h-24 rounded-full object-cover ring-4 ring-surface-container-lowest shadow-md bg-white"
+                    src={selectedProfile.avatar}
+                  />
+                  <PresenceDot online={selectedProfile.id ? presence[selectedProfile.id] : null} className="absolute bottom-1 right-1 w-4 h-4 ring-2 ring-white" />
+                </div>
+
+                {/* Badge de tipo de perfil */}
+                <span className="px-3 py-1 rounded-full font-label-sm text-label-sm bg-surface-container text-on-surface-variant font-medium flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">
+                    {selectedProfile.isVerified ? 'store' : 'person'}
+                  </span>
+                  <span>{selectedProfile.isVerified ? 'Negocio Verificado' : 'Miembro Promexa'}</span>
+                </span>
+              </div>
+
+              {/* Nombres y Handles */}
+              <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="font-headline-sm text-xl text-on-surface font-bold">
+                    {selectedProfile.name}
+                  </h3>
+                  {selectedProfile.isVerified && (
+                    <span
+                      className="material-symbols-outlined text-primary-container text-[20px]"
+                      style={{ fontVariationSettings: "'FILL' 1" }}
+                      title="Verificado"
+                    >
+                      verified
+                    </span>
+                  )}
+                </div>
+                <span className="font-body-md text-sm text-outline">
+                  {selectedProfile.handle || `@${selectedProfile.name.toLowerCase().replace(/\s+/g, '')}`}
+                </span>
+              </div>
+
+              {/* Ubicación y Conexiones */}
+              <div className="flex items-center gap-4 text-xs text-on-surface-variant mt-3">
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[15px] text-outline">location_on</span>
+                  {selectedProfile.location || 'Lima, Perú'}
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[15px] text-outline">diversity_3</span>
+                  {selectedProfile.mutualCount ? `${selectedProfile.mutualCount} amigos en común` : 'Red local'}
+                </span>
+              </div>
+
+              {/* Etiquetas */}
+              {selectedProfile.tags && selectedProfile.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {selectedProfile.tags.map((tag, i) => (
+                    <span
+                      key={i}
+                      className="px-2.5 py-0.5 rounded-full bg-surface-container font-caption text-caption text-on-surface-variant font-medium"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Separador */}
+              <div className="h-px bg-surface-container/80 my-4" />
+
+              {/* Botones de acción principales */}
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                {/* Botón Conversar / Enviar Mensaje */}
+                <button
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all transform active:scale-98"
+                  type="button"
+                  onClick={() =>
+                    handleStartChat(
+                      selectedProfile.name,
+                      selectedProfile.avatar,
+                      selectedProfile.isVerified,
+                      selectedProfile.id
+                    )
+                  }
+                >
+                  <span className="material-symbols-outlined text-[18px]">chat</span>
+                  <span>Conversar ahora</span>
+                </button>
+
+                {/* Botón Agregar a amigos */}
+                <button
+                  className={`py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                    friendsMap[selectedProfile.name]
+                      ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#86EFAC] hover:bg-[#bbf7d0]'
+                      : 'bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/40'
+                  }`}
+                  type="button"
+                  onClick={() => handleToggleFriend(selectedProfile.name)}
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {friendsMap[selectedProfile.name] ? 'how_to_reg' : 'person_add'}
+                  </span>
+                  <span>{friendsMap[selectedProfile.name] ? 'Amigos' : 'Agregar amigo'}</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-center text-outline mt-3">
+                Conecta y chatea en tiempo real con este usuario en Promexa.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

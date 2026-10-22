@@ -1,104 +1,124 @@
-import {
-  WebSocketGateway,
-  WebSocketServer,
-  SubscribeMessage,
-  MessageBody,
-  ConnectedSocket,
-  OnGatewayConnection,
-  OnGatewayDisconnect,
-} from '@nestjs/websockets';
+import { WebSocketGateway, WebSocketServer, SubscribeMessage, MessageBody,
+  ConnectedSocket, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
+import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
-
-interface ChatMessage {
-  chatId: string;
-  senderId: string;
-  senderName: string;
-  text: string;
-  time: string;
-}
+import { UsersService } from '../users/users.service';
+import { realtimeHealth } from '../../websockets/realtime-health';
+import { ChatService } from './chat.service';
 
 @WebSocketGateway({
-  cors: {
-    origin: ['http://localhost:3000'],
-    credentials: true,
-  },
+  cors: { origin: ['http://localhost:3000', 'http://127.0.0.1:3000', process.env.CORS_ORIGIN].filter(Boolean), credentials: true },
   namespace: '/chat',
+  pingInterval: 10000,
+  pingTimeout: 10000,
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer()
-  server: Server;
+  @WebSocketServer() server: Server;
+  constructor(private readonly jwt: JwtService, private readonly users: UsersService,
+    private readonly chat: ChatService) {}
 
-  private connectedUsers = new Map<string, { socketId: string; userId: string; name: string }>();
-
-  handleConnection(client: Socket) {
-    console.log(`[WS] Cliente conectado: ${client.id}`);
+  private expiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private async publishPresence(userId: string) {
+    try {
+      if (!realtimeHealth.available) throw new Error('Presence unavailable');
+      const sockets = await this.server.in(`user:${userId}`).fetchSockets();
+      this.server.to(`presence:${userId}`).emit('presenceChanged', { userId, online: sockets.length > 0 });
+    } catch {
+      this.server.local.to(`presence:${userId}`).emit('presenceUnknown', { userId });
+    }
+  }
+  async handleDisconnect(client: Socket) {
+    clearTimeout(this.expiryTimers.get(client.id)); this.expiryTimers.delete(client.id);
+    if (client.data.user) await this.publishPresence(client.data.user.id);
+  }
+  @SubscribeMessage('watchPresence')
+  async watchPresence(@ConnectedSocket() client: Socket, @MessageBody() payload: { userIds: string[]; productId?: string }) {
+    const user = client.data.user;
+    if (!user || Date.now() >= user.expiresAt) { client.disconnect(true); return { ok: false }; }
+    if (!payload || !Array.isArray(payload.userIds) || payload.userIds.length > 100
+      || payload.userIds.some(id => typeof id !== 'string' || id.length > 100)
+      || (payload.productId !== undefined && (typeof payload.productId !== 'string' || payload.productId.length > 100))) return { ok: false };
+    const revision = (client.data.presenceRevision || 0) + 1;
+    client.data.presenceRevision = revision;
+    try {
+      if (!realtimeHealth.available) return { ok: false };
+      const contacts = await this.chat.contacts(user.id);
+      if (client.data.presenceRevision !== revision) return { ok: false };
+      const allowed = new Set([user.id, ...contacts.map(contact => contact.id)]);
+      const status: Record<string, boolean | null> = {};
+      const requested = Array.from(new Set(payload.userIds));
+      for (const room of client.rooms) if (room.startsWith('presence:')) await client.leave(room);
+      for (const id of requested) {
+        if (client.data.presenceRevision !== revision) return { ok: false };
+        if (!allowed.has(id) && !(payload.productId && await this.chat.canContact(user.id, id, payload.productId))) { status[id] = null; continue; }
+        await client.join(`presence:${id}`);
+        const sockets = await this.server.in(`user:${id}`).fetchSockets();
+        status[id] = sockets.length > 0;
+      }
+      return { ok: true, status };
+    } catch { return { ok: false }; }
   }
 
-  handleDisconnect(client: Socket) {
-    this.connectedUsers.delete(client.id);
-    console.log(`[WS] Cliente desconectado: ${client.id}`);
+  async handleConnection(client: Socket) {
+    try {
+      const payload = await this.jwt.verifyAsync(client.handshake.auth.token, { algorithms: ['HS256'] });
+      if (typeof payload.exp !== 'number' || payload.exp * 1000 <= Date.now() || typeof payload.sub !== 'string') throw new Error('Invalid identity');
+      const user = await this.users.findById(payload.sub);
+      if (!user) throw new Error('Unknown user');
+      client.data.user = { id: user.id, name: user.name, expiresAt: payload.exp * 1000 };
+      if (!client.connected) return;
+      await client.join(`user:${user.id}`);
+      if (!client.connected) return;
+      this.expiryTimers.set(client.id, setTimeout(() => client.disconnect(true), Math.min(payload.exp * 1000 - Date.now(), 2147483647)));
+      await this.publishPresence(user.id);
+      client.emit('ready');
+    } catch {
+      client.disconnect(true);
+    }
   }
 
-  @SubscribeMessage('join')
-  handleJoin(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { chatId: string; userId: string; name: string },
-  ) {
-    client.join(payload.chatId);
-    this.connectedUsers.set(client.id, {
-      socketId: client.id,
-      userId: payload.userId,
-      name: payload.name,
-    });
-    console.log(`[WS] ${payload.name} se unió a la sala ${payload.chatId}`);
-
-    // Confirmar al cliente que entró a la sala
-    client.emit('joined', { chatId: payload.chatId });
-  }
-
-  @SubscribeMessage('leave')
-  handleLeave(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { chatId: string },
-  ) {
-    client.leave(payload.chatId);
-    console.log(`[WS] Socket ${client.id} salió de la sala ${payload.chatId}`);
+  private async recipient(client: Socket, recipientId: string, productId?: string) {
+    const user = client.data.user;
+    if (!user || !Number.isFinite(user.expiresAt) || Date.now() >= user.expiresAt) {
+      client.disconnect(true);
+      return null;
+    }
+    const friends = await this.users.getFriends(user.id);
+    return user.id !== recipientId && (friends.some(friend => friend.id === recipientId)
+      || await this.chat.canContact(user.id, recipientId, productId)) ? user : null;
   }
 
   @SubscribeMessage('sendMessage')
-  handleSendMessage(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: ChatMessage,
-  ) {
-    const { chatId, ...messageData } = payload;
-
-    // Construir el objeto de mensaje con ID único
-    const message = {
-      id: `ws-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      sender: 'other' as const,
-      ...messageData,
-      status: 'delivered' as const,
-    };
-
-    // Emitir a todos los miembros de la sala EXCEPTO al remitente
-    client.to(chatId).emit('receiveMessage', { chatId, message });
-
-    // Confirmar al remitente que el mensaje fue enviado
-    client.emit('messageSent', { chatId, messageId: message.id });
-
-    console.log(`[WS] Mensaje en sala ${chatId}: "${payload.text.slice(0, 40)}..."`);
+  async send(@ConnectedSocket() client: Socket,
+    @MessageBody() payload: { recipientId: string; text: string; productId?: string; clientMessageId?: string }) {
+    if (!payload || typeof payload.recipientId !== 'string' || typeof payload.text !== 'string'
+      || !payload.text.trim() || payload.text.length > 5000
+      || (payload.productId !== undefined && (typeof payload.productId !== 'string' || payload.productId.length > 100))
+      || (payload.clientMessageId !== undefined && (typeof payload.clientMessageId !== 'string' || !/^[a-f0-9-]{36}$/.test(payload.clientMessageId)))) return { ok: false };
+    let message;
+    let user;
+    try {
+      user = await this.recipient(client, payload.recipientId, payload.productId);
+      if (!user) return { ok: false, code: 'FORBIDDEN' };
+      message = await this.chat.save(user.id, payload.recipientId, payload.text.trim(), payload.productId, payload.clientMessageId);
+    } catch (error) {
+      return { ok: false, code: error.status === 400 ? 'INVALID' : 'TEMPORARY' };
+    }
+    try {
+      this.server.to(`user:${payload.recipientId}`).emit('receiveMessage', message);
+      client.to(`user:${user.id}`).emit('receiveMessage', message);
+    } catch { /* The durable history repairs missed realtime deliveries. */ }
+    return { ok: true, message };
   }
 
   @SubscribeMessage('typing')
-  handleTyping(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { chatId: string; senderName: string; isTyping: boolean },
-  ) {
-    // Emitir estado de escritura a los demás en la sala
-    client.to(payload.chatId).emit('userTyping', {
-      chatId: payload.chatId,
-      senderName: payload.senderName,
-      isTyping: payload.isTyping,
+  async typing(@ConnectedSocket() client: Socket,
+    @MessageBody() payload: { recipientId: string; isTyping: boolean }) {
+    if (!payload || typeof payload.recipientId !== 'string') return;
+    let user;
+    try { user = await this.recipient(client, payload.recipientId); } catch { return; }
+    if (user) this.server.to(`user:${payload.recipientId}`).emit('userTyping', {
+      senderId: user.id, isTyping: Boolean(payload.isTyping),
     });
   }
 }

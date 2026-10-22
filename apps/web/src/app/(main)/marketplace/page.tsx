@@ -2,6 +2,8 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import ImagePicker from '@/components/profile/ImagePicker';
+import { uploadImage } from '@/lib/upload-image';
 import { useAuth } from '@/lib/auth-context';
 
 export interface Product {
@@ -20,158 +22,6 @@ export interface Product {
   contactPhone?: string;
 }
 
-const STORAGE_KEY_PRODUCTS = 'promexa_marketplace_products_v1';
-const STORAGE_KEY_FAVORITES = 'promexa_marketplace_favorites_v1';
-
-const PRESET_IMAGES = [
-  {
-    label: 'Tecnología (Audífonos)',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBg21NIl8VdFPryF6IWY-blXSc13SLNb4Sl7Q9l8EWc2PLSRgFGRh0sujb6aUCKCUYPDPiOiITsYoFh-jk5Kn13VWgSeKG-xa-eUIQ_KOQZoBC4B7-zyLcvi6Jcv1PM5I-q2XaynJA_RoFH4LNb9KCKa6L4xSiHeqtQjEh4MM_aAXm1I2VFbn6GKlfDYzJOQjAwai280GrID5emqvvty-Skt8vBumoZrOc2D6TQrlo',
-  },
-  {
-    label: 'Calzado & Moda',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAtwIrPJpJDD6RZoc-kmSxoH4Q4hV8mkzGwEm3y7S-5D611CQMrt6jrg6RPNOq7wGuQuLM2zHuvjJQxwf3f8fs7YUYGlKlTZfTWaS7Odb4kCWP1L9Q2KZ1Q0UB_zMq-cP9Nt6sJDuxDYEMIo9vhXP3VF9nx1NRIks8UcRO472IQlPY4weXVMNxS2fBIfqM1_eD7sH2Hk1jNc7EUDwvDOwwAl7T3Gj508HAHytIsLd0',
-  },
-  {
-    label: 'Muebles & Hogar',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA_swiMZZIbF1o0yMzFUfJty7mqNEB2JsKwNRRCcUxW4kLP-UsTynJTDUfYZeSoh9R7CTUQYtpnT1NZh2j5b1Xf-AD-q7Ga9QVy2Snr7XVsbJbkjDxIiZOe_h_b-Dj9u9sJbTZIS8agku5KuKErkPUmd1wZLj0tvmTmVL5JKu9OQxR-RWeblxlGZfQsPd3mK49XcQmHVr2xEZWQHj9gv7hx9p31VP6qs21_UHBO-oE',
-  },
-  {
-    label: 'Café & Alimentos',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA_npRui3HeF5IBwu_Ajcn1x0E9bLy4XFPJGdraIl9GwnlE5bAA0JY7KorOti0AgsRXpVVYjQRISJe4g3shEGwpwd5vLd9_-bzqZx2-JzUvp3BlOBSw4qnhNvuNy6jqXZ1-63SDICV0Vjc81C7WZL-2mVJpx386fihVgK7PsvBIFQTcM4KlEz5DQlE72ZjD3lT0VTQokmA18XkcNhPc3rZlSPA2mGF0kMxOICPBXHM',
-  },
-  {
-    label: 'Accesorios & Bolsos',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBVxmF8dscqlLeiZaGMhVkbg-9FG2ZAtF_40174SeFo3mnxiO1fIRqnS4L14_86ec_7fw-IEMSbZC3deeelgYQzJpIXqTtxx29HsxN3Yrn7We52RvahxWzUd-bcNU3p9e-RmbSggkkWIeQm0cNmlH4_6z3EOJML_46PsgVpboNXh67lg-c2i2QIj6Zpq2rPKo7RaqaLoqFExJt_zC6YP8uyM58pz1ov1biiGipDrek',
-  },
-  {
-    label: 'Decoración & Iluminación',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAaKZFpAI2FLZnT4MHWq1gh6IefAY8q9xIyhMKRLkmD0PGdvdTl87e_RlQPC5bFk7ZzQsop4VFgfoscjnHRORss1PwMI0sa4RzYT8XJFu1hY1a3t4fmuhxzxEWN7J62x4XGURFphmbE99e8WKdQhBM0h6A7OC8J5LOllEATZ7ZyISdBVyCh6VitdledGtHRdMT8XOTsqM49BhJxDpbNfzH-16C7OzD4oflf0X4SBhA',
-  },
-  {
-    label: 'Pastelería & Dulces',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBwaVORiUPu7DaJRkXr9zT-6H768qBfTbF2Wt77Wfg_ClQAg_Lfc3b_fgjKuC_U6sbZmbWICWN5U0KferwY2PtN483DSUhcvirYIf1cRC7Wbjp19VLvO3OlbNIRwebQUgKbOiLsBbbCswu8-k0KeIxCvDN166HHT_eFyEZaKsBjytqKy1J2NjIep4FUpZT_yirJluSpXq4GyeOQtFQDw8u9joPBUM9_w7gdWQxOAOM',
-  },
-  {
-    label: 'Cuidado Personal & Skincare',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCZZEpVWZtYl9TBWZ1DeGTYcMZRuOKPlbcoVMizdnN8R7gXnKCLjx1jY0iMpKbL8pbpZmkZ8tKTn7u36B2h81-KyMR3qxqq-2aAtQ9_0N35uKnJthW-td1tZn8qNj1VrCtMj8pSepMNVivQYmKPJUEtTUxq0riHFyOOxpDAP6nv2qp2ceHuZKXA8vCE6YbiULPhLb__r9rBw4cFHv_sVT6NNNGMgQdoq4Mvjnrs0Zk',
-  },
-];
-
-const INITIAL_PRODUCTS: Product[] = [
-  {
-    id: 'p1',
-    name: 'Audífonos Bluetooth ANC Pro',
-    description: 'Audífonos con cancelación activa de ruido híbrida de 40dB, 35 horas de batería continua y sonido Hi-Res. Incluye estuche rígido y cable de carga rápida tipo C.',
-    price: 149,
-    category: 'Tecnología',
-    district: 'Miraflores',
-    store: 'TechStore Perú',
-    isVerified: true,
-    status: 'Disponible',
-    image: PRESET_IMAGES[0].url,
-    createdAt: Date.now() - 1000 * 60 * 30,
-    contactPhone: '+51 987 654 321',
-  },
-  {
-    id: 'p2',
-    name: 'Zapatillas Cuero Urban Classic',
-    description: 'Zapatillas de cuero legítimo confeccionadas por artesanos peruanos. Suela ergonómica antideslizante y plantilla con memoria para máxima comodidad diaria.',
-    price: 189,
-    category: 'Moda & Calzado',
-    district: 'San Isidro',
-    store: 'Moda Urbana Lima',
-    isVerified: false,
-    status: 'Disponible',
-    image: PRESET_IMAGES[1].url,
-    createdAt: Date.now() - 1000 * 60 * 120,
-    contactPhone: '+51 912 345 678',
-  },
-  {
-    id: 'p3',
-    name: 'Escritorio Ergonómico Roble 120cm',
-    description: 'Escritorio de madera maciza de roble con estructura de acero electrostático mate. Pasacables integrado y soporte para audífonos. Ideal para home office.',
-    price: 320,
-    category: 'Hogar & Muebles',
-    district: 'Surco',
-    store: 'Muebles & Diseño',
-    isVerified: true,
-    status: 'Reservado',
-    image: PRESET_IMAGES[2].url,
-    createdAt: Date.now() - 1000 * 60 * 360,
-    contactPhone: '+51 945 678 123',
-  },
-  {
-    id: 'p4',
-    name: 'Pack Cafetero Especial + Prensa',
-    description: 'Cosecha fresca de café de especialidad de Villa Rica (500g, tueste medio) acompañado de prensa francesa de vidrio borosilicato de 600ml.',
-    price: 85,
-    category: 'Gastronomía',
-    district: 'Barranco',
-    store: 'Don Pedro Tostaduría',
-    isVerified: true,
-    status: 'Disponible',
-    image: PRESET_IMAGES[3].url,
-    createdAt: Date.now() - 1000 * 60 * 480,
-    contactPhone: '+51 999 111 222',
-  },
-  {
-    id: 'p5',
-    name: 'Mochila Ejecutiva Anti-robo',
-    description: 'Mochila impermeable con cremalleras ocultas, puerto de carga USB externo, compartimento acolchado para laptop de hasta 16" y correa para equipaje.',
-    price: 119,
-    category: 'Accesorios',
-    district: 'San Borja',
-    store: 'TravelGear Perú',
-    isVerified: true,
-    status: 'Disponible',
-    image: PRESET_IMAGES[4].url,
-    createdAt: Date.now() - 1000 * 60 * 720,
-    contactPhone: '+51 988 777 666',
-  },
-  {
-    id: 'p6',
-    name: 'Lámpara de Mesa Táctil Nórdica',
-    description: 'Lámpara de diseño minimalista escandinavo con base de madera natural y 3 niveles de brillo táctil regulable. Incluye bombilla LED cálida de bajo consumo.',
-    price: 65,
-    category: 'Hogar & Muebles',
-    district: 'La Molina',
-    store: 'DecoHogar',
-    isVerified: false,
-    status: 'Disponible',
-    image: PRESET_IMAGES[5].url,
-    createdAt: Date.now() - 1000 * 60 * 900,
-    contactPhone: '+51 977 444 333',
-  },
-  {
-    id: 'p7',
-    name: 'Torta Suprema de Chocolate Belga',
-    description: 'Elaborada artesanalmente con cacao al 70%, fudge casero y capas suaves de bizcochuelo húmedo. Rinde de 10 a 12 porciones. Pedidos con 24h de anticipación.',
-    price: 55,
-    category: 'Gastronomía',
-    district: 'Jesús María',
-    store: 'Pastelería Dulce Sabor',
-    isVerified: true,
-    status: 'Disponible',
-    image: PRESET_IMAGES[6].url,
-    createdAt: Date.now() - 1000 * 60 * 1200,
-    contactPhone: '+51 966 222 888',
-  },
-  {
-    id: 'p8',
-    name: 'Pack Skincare Botánico Natural',
-    description: 'Set completo de cuidado facial orgánico: sérum antioxidante de camu camu, crema hidratante de jojoba y jabón exfoliante artesanal de avena y miel.',
-    price: 79,
-    category: 'Servicios',
-    district: 'Miraflores',
-    store: 'EcoBelleza',
-    isVerified: true,
-    status: 'Disponible',
-    image: PRESET_IMAGES[7].url,
-    createdAt: Date.now() - 1000 * 60 * 1500,
-    contactPhone: '+51 955 888 111',
-  },
-];
 
 const CATEGORIES = [
   'Todas',
@@ -197,10 +47,14 @@ const DISTRICTS = [
 ];
 
 export default function MarketplacePage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const favoritesKey = `promexa_marketplace_favorites_v2:${user?.id || ""}`;
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [publishError, setPublishError] = useState('');
 
   // Estados principales
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [selectedDistrict, setSelectedDistrict] = useState<string>('Todos los distritos');
@@ -223,66 +77,48 @@ export default function MarketplacePage() {
   const [newProductDistrict, setNewProductDistrict] = useState('Miraflores');
   const [newProductDescription, setNewProductDescription] = useState('');
   const [newProductPhone, setNewProductPhone] = useState('');
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [customImageUrl, setCustomImageUrl] = useState('');
+  const [photo, setPhoto] = useState<File | null>(null);
+  const uploadedPhoto = useRef<{ file: File; url: string } | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const carouselRef = useRef<HTMLDivElement>(null);
+  const requestProducts = async (path = '', options: RequestInit = {}) => {
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+    const res = await fetch(`${base}/marketplace/products${path}`, {
+      ...options, cache: 'no-store', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(Array.isArray(data.message) ? data.message.join('. ') : data.message || 'No se pudo completar la operacion');
+    return data;
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Carga inicial y persistencia
+  // Products always come from PostgreSQL, never from the old demo cache.
   useEffect(() => {
-    try {
-      const storedProducts = localStorage.getItem(STORAGE_KEY_PRODUCTS);
-      if (storedProducts) {
-        const parsed = JSON.parse(storedProducts);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setProducts(parsed);
-        } else {
-          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
-        }
-      } else {
-        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
-      }
-
-      const storedFavs = localStorage.getItem(STORAGE_KEY_FAVORITES);
-      if (storedFavs) {
-        setFavoriteIds(JSON.parse(storedFavs));
-      }
-    } catch (e) {
-      console.error('Error loading marketplace data:', e);
-    }
-  }, []);
-
-  const persistProducts = (updated: Product[]) => {
-    setProducts(updated);
-    try {
-      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(updated));
-    } catch (e) {
-      console.error('Error saving marketplace products:', e);
-    }
-  };
+    if (!token) return;
+    let active = true;
+    setLoading(true); setLoadError('');
+    requestProducts().then(data => { if (active) setProducts(data); })
+      .catch(() => { if (active) { setProducts([]); setLoadError('No se pudieron cargar los productos. Intenta recargar la pagina.'); } })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [token]);
+  useEffect(() => {
+    try { setFavoriteIds(JSON.parse(localStorage.getItem(favoritesKey) || '{}')); }
+    catch { setFavoriteIds({}); }
+  }, [favoritesKey]);
 
   const persistFavorites = (updatedFavs: { [id: string]: boolean }) => {
     setFavoriteIds(updatedFavs);
     try {
-      localStorage.setItem(STORAGE_KEY_FAVORITES, JSON.stringify(updatedFavs));
+      localStorage.setItem(favoritesKey, JSON.stringify(updatedFavs));
     } catch (e) {
       console.error('Error saving marketplace favorites:', e);
-    }
-  };
-
-  // Scroll del carrusel superior
-  const scrollCarousel = (direction: 'left' | 'right') => {
-    if (carouselRef.current) {
-      const scrollAmount = direction === 'left' ? -280 : 280;
-      carouselRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
     }
   };
 
@@ -294,86 +130,49 @@ export default function MarketplacePage() {
     showToast(updated[id] ? 'Producto guardado en tus favoritos ❤️' : 'Producto removido de favoritos');
   };
 
-  // Cambiar estado de un producto (Disponible / Reservado)
-  const handleToggleProductStatus = (productId: string) => {
-    const updated = products.map((p) => {
-      if (p.id === productId) {
-        const nextStatus: 'Disponible' | 'Reservado' = p.status === 'Disponible' ? 'Reservado' : 'Disponible';
-        return { ...p, status: nextStatus };
-      }
-      return p;
-    });
-    persistProducts(updated);
-
-    if (selectedProduct && selectedProduct.id === productId) {
-      setSelectedProduct({
-        ...selectedProduct,
-        status: selectedProduct.status === 'Disponible' ? 'Reservado' : 'Disponible',
+  const handleToggleProductStatus = async (productId: string) => {
+    const product = products.find(item => item.id === productId);
+    if (!product || product.sellerId !== user?.id) return;
+    try {
+      const updated = await requestProducts(`/${productId}/status`, {
+        method: 'PATCH', body: JSON.stringify({ status: product.status === 'Disponible' ? 'Reservado' : 'Disponible' }),
       });
-    }
-
-    showToast('Estado del producto actualizado');
+      setProducts(previous => previous.map(item => item.id === updated.id ? updated : item));
+      setSelectedProduct(updated); showToast('Estado actualizado');
+    } catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo actualizar'); }
   };
-
-  // Eliminar un producto
-  const handleDeleteProduct = (productId: string) => {
-    if (confirm('¿Estás seguro de que deseas eliminar este producto del marketplace?')) {
-      const updated = products.filter((p) => p.id !== productId);
-      persistProducts(updated);
-      setSelectedProduct(null);
-      showToast('Producto eliminado del Marketplace');
-    }
+  const handleDeleteProduct = async (productId: string) => {
+    if (!confirm('Eliminar este producto del marketplace?')) return;
+    try {
+      await requestProducts(`/${productId}`, { method: 'DELETE' });
+      setProducts(previous => previous.filter(item => item.id !== productId));
+      setSelectedProduct(null); showToast('Producto eliminado');
+    } catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo eliminar'); }
   };
-
-  // Publicar nuevo producto
-  const handleCreateProduct = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProductName.trim()) {
-      showToast('Por favor escribe el nombre del producto');
-      return;
+  const handleCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault(); if (isPublishing) return;
+    const price = Number(newProductPrice);
+    if (!newProductName.trim() || !Number.isFinite(price) || price <= 0) {
+      setPublishError('Escribe un nombre y un precio valido mayor a cero'); return;
     }
-    const parsedPrice = parseFloat(newProductPrice);
-    if (isNaN(parsedPrice) || parsedPrice <= 0) {
-      showToast('Ingresa un precio válido mayor a 0');
-      return;
-    }
-
-    setIsPublishing(true);
-
-    const imageUrl = customImageUrl.trim() || PRESET_IMAGES[selectedImageIndex].url;
-    const storeName = user?.name || 'Mi Negocio Promexa';
-
-    const newProduct: Product = {
-      id: `prod-${Date.now()}`,
-      name: newProductName.trim(),
-      description: newProductDescription.trim() || 'Producto disponible en Promexa. Coordinación directa y segura con el vendedor.',
-      price: parsedPrice,
-      category: newProductCategory,
-      district: newProductDistrict,
-      store: storeName,
-      sellerId: user?.id,
-      isVerified: user?.isVerified ?? true,
-      status: 'Disponible',
-      image: imageUrl,
-      createdAt: Date.now(),
-      contactPhone: newProductPhone.trim() || '+51 999 888 777',
-    };
-
-    const updated = [newProduct, ...products];
-    persistProducts(updated);
-
-    setIsPublishing(false);
-    setIsPublishModalOpen(false);
-
-    // Reset form
-    setNewProductName('');
-    setNewProductPrice('');
-    setNewProductDescription('');
-    setNewProductPhone('');
-    setCustomImageUrl('');
-    setSelectedImageIndex(0);
-
-    showToast('¡Tu producto ha sido publicado exitosamente en el Marketplace!');
+    setIsPublishing(true); setPublishError('');
+    try {
+      let image: string | undefined;
+      if (photo) {
+        if (uploadedPhoto.current?.file !== photo) uploadedPhoto.current = { file: photo, url: await uploadImage(photo, 'post', token) };
+        image = uploadedPhoto.current.url;
+      }
+      const product = await requestProducts('', { method: 'POST', body: JSON.stringify({
+        name: newProductName.trim(), description: newProductDescription.trim(), price,
+        category: newProductCategory, district: newProductDistrict,
+        contactPhone: newProductPhone.trim() || undefined, image,
+      }) });
+      setProducts(previous => [product, ...previous]);
+      setIsPublishModalOpen(false); setNewProductName(''); setNewProductPrice('');
+      setNewProductDescription(''); setNewProductPhone(''); setPhoto(null); uploadedPhoto.current = null;
+      showToast('Tu producto fue publicado');
+    } catch (error) { setPublishError(error instanceof Error ? error.message : 'No se pudo publicar'); }
+    finally { setIsPublishing(false); }
   };
 
   // Limpiar todos los filtros
@@ -507,45 +306,11 @@ export default function MarketplacePage() {
             )}
           </div>
 
-          {/* Autocompletado / Búsquedas populares */}
-          {showSearchDropdown && (
-            <div className="absolute top-12 left-0 right-0 bg-surface-container-lowest rounded-xl shadow-xl z-30 p-2 space-y-1 border border-outline-variant/30 animate-fadeIn">
-              <div className="px-3 py-2 text-label-sm font-label-sm text-outline uppercase tracking-wider flex items-center justify-between">
-                <span>Búsquedas populares</span>
-                <span className="text-[11px] normal-case">Toca para filtrar</span>
-              </div>
-              <button
-                className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-container font-body-md text-body-md text-on-surface transition-colors"
-                type="button"
-                onMouseDown={() => setSearchQuery('Audífonos bluetooth')}
-              >
-                <span className="material-symbols-outlined text-[18px] text-primary">trending_up</span>
-                <span>Audífonos bluetooth con cancelación de ruido</span>
-              </button>
-              <button
-                className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-container font-body-md text-body-md text-on-surface transition-colors"
-                type="button"
-                onMouseDown={() => setSearchQuery('Café')}
-              >
-                <span className="material-symbols-outlined text-[18px] text-primary">trending_up</span>
-                <span>Café especial de Villa Rica orgánico</span>
-              </button>
-              <button
-                className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-container font-body-md text-body-md text-on-surface transition-colors"
-                type="button"
-                onMouseDown={() => setSearchQuery('Escritorio')}
-              >
-                <span className="material-symbols-outlined text-[18px] text-primary">trending_up</span>
-                <span>Escritorios ergonómicos de roble</span>
-              </button>
-              <button
-                className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-container font-body-md text-body-md text-on-surface transition-colors"
-                type="button"
-                onMouseDown={() => setSearchQuery('Zapatillas')}
-              >
-                <span className="material-symbols-outlined text-[18px] text-primary">trending_up</span>
-                <span>Zapatillas de cuero hechas en Lima</span>
-              </button>
+          {showSearchDropdown && searchQuery.trim() && (
+            <div className="absolute top-12 left-0 right-0 bg-white rounded-xl shadow-xl z-30 p-2 border">
+              {products.filter(product => product.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 5).map(product => (
+                <button key={product.id} type="button" onMouseDown={() => setSearchQuery(product.name)} className="block w-full text-left p-2 hover:bg-gray-50 rounded-lg">{product.name}</button>
+              ))}
             </div>
           )}
         </div>
@@ -765,7 +530,7 @@ export default function MarketplacePage() {
                 <span className="font-label-md text-label-md text-on-surface font-medium">
                   Negocios verificados
                 </span>
-                <span className="font-caption text-caption text-outline">Solo perfiles con RUC</span>
+                <span className="font-caption text-caption text-outline">Perfiles verificados</span>
               </div>
             </div>
             <button
@@ -787,81 +552,8 @@ export default function MarketplacePage() {
 
         {/* CONTENIDO DERECHA: Carrusel + Catálogo */}
         <section className="flex-1 min-w-0 space-y-6 w-full">
-          {/* Carrusel de Recomendados para ti */}
-          <div className="bg-surface-container-lowest rounded-xl p-5 shadow-sm space-y-4 border border-surface-container/60">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                  <span className="material-symbols-outlined text-[22px]">auto_awesome</span>
-                </div>
-                <div>
-                  <h3 className="font-headline-sm text-headline-sm text-on-surface text-[17px] leading-tight font-semibold">
-                    Recomendado para ti
-                  </h3>
-                  <p className="font-caption text-caption text-outline">
-                    Basado en tu actividad y comercios locales en Lima (ML Service)
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  className="w-8 h-8 rounded-full bg-surface-container-low hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors cursor-pointer"
-                  type="button"
-                  onClick={() => scrollCarousel('left')}
-                  title="Anterior"
-                >
-                  <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-                </button>
-                <button
-                  className="w-8 h-8 rounded-full bg-surface-container-low hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors cursor-pointer"
-                  type="button"
-                  onClick={() => scrollCarousel('right')}
-                  title="Siguiente"
-                >
-                  <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Horizontal Track de Recomendaciones */}
-            <div
-              ref={carouselRef}
-              className="flex gap-4 overflow-x-auto pb-2 scroll-smooth no-scrollbar"
-            >
-              {products.slice(0, 6).map((item) => (
-                <div
-                  key={`rec-${item.id}`}
-                  onClick={() => setSelectedProduct(item)}
-                  className="w-60 shrink-0 bg-surface-container-low rounded-xl overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group border border-surface-container/60"
-                >
-                  <div className="relative h-28 w-full bg-surface-variant overflow-hidden">
-                    <img
-                      alt={item.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      src={item.image}
-                    />
-                    <span className="absolute top-2 left-2 bg-surface-container-lowest/90 backdrop-blur-sm px-2 py-0.5 rounded-full font-label-sm text-label-sm text-primary font-medium">
-                      {item.category}
-                    </span>
-                  </div>
-                  <div className="p-3">
-                    <p className="font-body-md-medium text-body-md-medium text-on-surface truncate font-semibold">
-                      {item.name}
-                    </p>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="font-headline-sm text-headline-sm text-primary font-bold text-[15px]">
-                        S/ {item.price.toFixed(2)}
-                      </span>
-                      <span className="font-caption text-caption text-on-surface-variant bg-surface-container px-1.5 py-0.5 rounded">
-                        {item.district}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
+          {loading && <p role="status">Cargando productos...</p>}
+          {loadError && <p role="alert" className="text-red-700">{loadError}</p>}
           {/* Barra de Estado y Resultados Activos */}
           <div className="flex items-center justify-between px-1 flex-wrap gap-2">
             <div className="flex items-center gap-2 text-body-md font-body-md text-on-surface">
@@ -906,7 +598,7 @@ export default function MarketplacePage() {
           </div>
 
           {/* Grilla Principal de Productos (Responsive) */}
-          {filteredProducts.length === 0 ? (
+          {loading || loadError ? null : filteredProducts.length === 0 ? (
             <div className="bg-surface-container-lowest rounded-xl p-12 text-center border border-dashed border-outline-variant/60 space-y-4">
               <div className="w-16 h-16 mx-auto rounded-full bg-surface-container flex items-center justify-center text-outline">
                 <span className="material-symbols-outlined text-[32px]">inventory_2</span>
@@ -937,11 +629,11 @@ export default function MarketplacePage() {
                 >
                   {/* Imagen y badges */}
                   <div className="relative w-full aspect-square bg-surface-container-low overflow-hidden">
-                    <img
+                    {product.image ? (<img
                       alt={product.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       src={product.image}
-                    />
+                    />) : <div className="w-full h-48 flex items-center justify-center bg-gray-100 text-gray-500">Sin imagen</div>}
 
                     {/* Badge de Disponibilidad */}
                     <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-lowest/95 backdrop-blur-sm shadow-sm">
@@ -1015,7 +707,7 @@ export default function MarketplacePage() {
                           <span
                             className="material-symbols-outlined text-primary-container text-[15px] shrink-0"
                             style={{ fontVariationSettings: "'FILL' 1" }}
-                            title="Negocio Verificado con RUC"
+                            title="Perfil verificado"
                           >
                             verified
                           </span>
@@ -1024,7 +716,7 @@ export default function MarketplacePage() {
 
                       {/* Botón de Contacto Rápido */}
                       <Link
-                        href={`/mensajes?store=${encodeURIComponent(product.store)}&product=${encodeURIComponent(product.name)}`}
+                        href={`/mensajes?userId=${encodeURIComponent(product.sellerId || "")}&productId=${encodeURIComponent(product.id)}`}
                         onClick={(e) => e.stopPropagation()}
                         className="text-primary hover:text-on-primary-fixed-variant p-1.5 rounded-lg hover:bg-surface-container transition-colors"
                         title="Contactar al vendedor por chat"
@@ -1101,8 +793,8 @@ export default function MarketplacePage() {
                     <input
                       required
                       type="number"
-                      step="0.10"
-                      min="1"
+                      step="0.01"
+                      min="0.01"
                       value={newProductPrice}
                       onChange={(e) => setNewProductPrice(e.target.value)}
                       placeholder="0.00"
@@ -1172,45 +864,15 @@ export default function MarketplacePage() {
                   type="text"
                   value={newProductPhone}
                   onChange={(e) => setNewProductPhone(e.target.value)}
-                  placeholder="+51 987 654 321"
+                  placeholder="Telefono de contacto (opcional)"
                   className="w-full h-11 px-3.5 bg-surface-container-low rounded-lg border border-outline-variant/50 focus:outline-none font-body-md text-on-surface"
                 />
               </div>
 
               {/* Selección de Foto */}
-              <div className="space-y-2">
-                <label className="font-body-md-medium text-body-md-medium text-on-surface font-semibold block">
-                  Selecciona una imagen representativa
-                </label>
-                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-                  {PRESET_IMAGES.map((img, idx) => (
-                    <button
-                      key={img.label}
-                      type="button"
-                      onClick={() => {
-                        setSelectedImageIndex(idx);
-                        setCustomImageUrl('');
-                      }}
-                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
-                        selectedImageIndex === idx && !customImageUrl
-                          ? 'border-primary ring-2 ring-primary/30 scale-105'
-                          : 'border-transparent opacity-70 hover:opacity-100'
-                      }`}
-                    >
-                      <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-                <div className="pt-1">
-                  <input
-                    type="url"
-                    value={customImageUrl}
-                    onChange={(e) => setCustomImageUrl(e.target.value)}
-                    placeholder="O pega una URL de imagen personalizada (https://...)"
-                    className="w-full h-10 px-3 bg-surface-container-low rounded-lg border border-outline-variant/50 text-caption font-caption focus:outline-none"
-                  />
-                </div>
-              </div>
+              <ImagePicker label="Foto del producto" file={photo} maxMB={10} disabled={isPublishing}
+                onChange={setPhoto} onRemove={() => { setPhoto(null); uploadedPhoto.current = null; }} />
+              {publishError && <p role="alert" className="text-red-700 text-sm">{publishError}</p>}
 
               {/* Botones de acción */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-surface-container">
@@ -1284,11 +946,11 @@ export default function MarketplacePage() {
             {/* Cuerpo del Modal: Foto y Datos */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               <div className="relative aspect-square rounded-xl overflow-hidden bg-surface-container-low border border-surface-container">
-                <img
+                {selectedProduct.image ? (<img
                   src={selectedProduct.image}
                   alt={selectedProduct.name}
                   className="w-full h-full object-cover"
-                />
+                />) : <div className="w-full h-48 flex items-center justify-center bg-gray-100 text-gray-500">Sin imagen</div>}
               </div>
 
               <div className="space-y-4">
@@ -1343,7 +1005,7 @@ export default function MarketplacePage() {
                 {/* Botones de acción y coordinación */}
                 <div className="pt-3 space-y-2.5">
                   <Link
-                    href={`/mensajes?store=${encodeURIComponent(selectedProduct.store)}&product=${encodeURIComponent(selectedProduct.name)}`}
+                    href={`/mensajes?userId=${encodeURIComponent(selectedProduct.sellerId || "")}&productId=${encodeURIComponent(selectedProduct.id)}`}
                     className="w-full h-12 rounded-xl bg-[#F28C28] hover:bg-[#e07b1b] text-on-primary font-body-md-medium text-body-md-medium font-semibold flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
                   >
                     <span className="material-symbols-outlined text-[20px]">chat</span>
@@ -1352,7 +1014,7 @@ export default function MarketplacePage() {
 
                   {/* Acciones de gestión para el vendedor */}
                   <div className="flex items-center gap-2">
-                    <button
+                    {selectedProduct.sellerId === user?.id && (<button
                       type="button"
                       onClick={() => handleToggleProductStatus(selectedProduct.id)}
                       className="flex-1 h-10 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md font-medium transition-colors flex items-center justify-center gap-1.5 border border-surface-container cursor-pointer"
@@ -1363,7 +1025,7 @@ export default function MarketplacePage() {
                       <span>
                         Cambiar a {selectedProduct.status === 'Disponible' ? 'Reservado' : 'Disponible'}
                       </span>
-                    </button>
+                    </button>)}
 
                     <button
                       type="button"
@@ -1385,14 +1047,14 @@ export default function MarketplacePage() {
                       </span>
                     </button>
 
-                    <button
+                    {selectedProduct.sellerId === user?.id && (<button
                       type="button"
                       onClick={() => handleDeleteProduct(selectedProduct.id)}
                       className="h-10 px-3 rounded-lg border border-surface-container text-outline hover:text-red-600 hover:bg-red-50 transition-colors flex items-center justify-center cursor-pointer"
                       title="Eliminar producto"
                     >
                       <span className="material-symbols-outlined text-[18px]">delete</span>
-                    </button>
+                    </button>)}
                   </div>
                 </div>
               </div>
