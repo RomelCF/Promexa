@@ -4,18 +4,18 @@ Plataforma social, Marketplace y mensajería en tiempo real con motor de recomen
 
 ---
 
-## 🏛️ Arquitectura del Sistema
+## Arquitectura del Sistema
 
 El sistema implementa un modelo **cliente-servidor desacoplado** apoyado en APIs REST y canales WebSocket:
 
 ```mermaid
 graph TD
     Client["Frontend (Next.js / TypeScript)"]
-    
+
     subgraph "Core Backend"
         API["NestJS Backend (REST & WebSockets)"]
     end
-    
+
     subgraph "Internal Intelligence"
         ML["ML Service (Python / Scikit-learn / Pandas)"]
     end
@@ -40,7 +40,7 @@ graph TD
 
 ---
 
-## 📂 Estructura del Repositorio
+## Estructura del Repositorio
 
 ```
 Promexa/
@@ -71,7 +71,7 @@ Promexa/
 │   │   │       ├── notifications/    # Notificaciones en tiempo real
 │   │   │       ├── storage/          # Integración con Amazon S3
 │   │   │       └── recommendation-client/ # Cliente hacia el ML Service
-│   │   └── test/                     # Tests unitarios y e2e
+│   │   └── test/                     # Tests unitarios y de integración
 │   │
 │   └── ml-service/                   # Servicio de Recomendaciones (Python)
 │       ├── app/
@@ -95,9 +95,13 @@ Promexa/
 │   └── workflows/                    # Pipelines de CI/CD (GitHub Actions)
 │       └── ci.yml
 │
-├── docs/                             # Documentación de arquitectura y modelo de datos
-│   └── architecture/
+├── docs/
+│   ├── architecture/
+│   │   └── ARCHITECTURE.md           # Documento técnico: diagramas, modelo de datos, decisiones
+│   ├── images.md                     # Guía de configuración de almacenamiento de imágenes
+│   └── team-setup.md                 # Guía de configuración para nuevos desarrolladores
 │
+├── CONSTRUCCION_SOFTWARE.md          # Documento técnico del curso (7 semanas + evidencia)
 ├── docker-compose.yml                # Orquestación de servicios para desarrollo local
 ├── .env.example                      # Plantilla de variables de entorno
 └── .gitignore                        # Reglas de exclusión para Git
@@ -105,14 +109,16 @@ Promexa/
 
 ---
 
-## 🚀 Inicio Rápido (Entorno Local)
+## Inicio Rápido (Entorno Local)
 
 ### 1. Clonar y configurar variables de entorno
+
 ```bash
 cp .env.example .env
 ```
 
 ### 2. Levantar bases de datos y servicios con Docker
+
 ```bash
 docker-compose up -d postgres neo4j redis
 ```
@@ -121,12 +127,14 @@ docker-compose up -d postgres neo4j redis
 - **Neo4j Browser UI**: `http://localhost:7474` (Bolt: `localhost:7687`)
 - **Redis**: `localhost:6379`
 
+---
 
-## Imagenes de perfil y posts
+## Imágenes de perfil y posts
 
-Subida de JPG, PNG y WebP con validacion y procesamiento en el backend. Almacenamiento local por defecto, S3/MinIO configurable. Ver [guia de imagenes](docs/images.md).
+Subida de JPG, PNG y WebP con validación y procesamiento en el backend. Almacenamiento local por defecto, S3/MinIO configurable. Ver [guía de imágenes](docs/images.md).
 
+---
 
 ## Trabajo en equipo y transferencia de datos
 
-Ver [guia para otro desarrollador](docs/team-setup.md): configuracion local, Prisma, respaldo/restauracion de PostgreSQL, imagenes y commit/push.
+Ver [guía para otro desarrollador](docs/team-setup.md): configuración local, Prisma, respaldo/restauración de PostgreSQL, imágenes y commit/push.

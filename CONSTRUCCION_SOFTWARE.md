@@ -22,6 +22,8 @@ Documento que relaciona los siete temas del curso con el código real del proyec
 
 ## Semana 1 — Construcción, Reúso y Dependencias
 
+> **En términos sencillos**: En lugar de programar cada función desde cero (lo que tomaría años y aumentaría el riesgo de errores), el sistema aprovecha herramientas y librerías reconocidas y probadas en la industria (como bases de datos, sistemas de contraseñas y frameworks web). Es semejante a construir una casa utilizando piezas prefabricadas y certificadas: cada módulo tiene una tarea específica, permitiendo que el proyecto crezca de forma ordenada, segura y fácil de mantener sin romper el resto.
+
 ### Gestión de dependencias con pnpm
 
 Promexa usa **pnpm workspaces** como gestor de paquetes monorepo.
@@ -84,6 +86,8 @@ apps/api/src/
 
 ## Semana 2 — Problemas de Tiempo de Ejecución en OO
 
+> **En términos sencillos**: Cuando un programa está ejecutándose en tiempo real, sus diferentes partes deben coordinarse e intercambiar información sin entorpecerse. En lugar de que los componentes estén "soldados" entre sí de manera rígida, el sistema funciona como una central telefónica inteligente: conecta las piezas adecuadas en el momento exacto en que se necesitan. Esto evita que la aplicación sea frágil y previene fallos inesperados si un servicio secundario cambia o no está disponible en ese instante.
+
 ### Polimorfismo e inyección de dependencias en NestJS
 
 NestJS implementa **enlace dinámico** a través de su contenedor de IoC.
@@ -144,6 +148,8 @@ Si Redis no está configurado, el sistema arranca sin el adaptador. Enlace tard�
 ---
 
 ## Semana 3 — Desarrollo por Contratos
+
+> **En términos sencillos**: Funciona igual que un contrato legal o los términos de un acuerdo. Antes de que el sistema acepte procesar cualquier solicitud (como registrar una cuenta, enviar un mensaje o publicar un producto en venta), verifica de forma automática que los datos cumplan estrictamente con reglas claras pactadas de antemano: que el correo tenga un formato válido, que la contraseña sea lo bastante larga o que un precio no sea negativo. Si no se cumplen las condiciones del contrato, la petición se rechaza de inmediato antes de que pueda desordenar o dañar la información del sistema.
 
 ### DTOs como contratos de interfaz con precondiciones ejecutables
 
@@ -214,6 +220,8 @@ export class PrismaService extends PrismaClient
 ---
 
 ## Semana 4 — Programación Defensiva
+
+> **En términos sencillos**: Este apartado sigue la regla de "desconfiar por defecto". Es similar al filtro de seguridad o la aduana de un aeropuerto: cualquier dato o archivo que provenga de internet o de un usuario externo es revisado minuciosamente. Si alguien intenta enviar información con formato sospechoso, fotos con extensiones falsificadas o textos maliciosos diseñados para saturar el servidor, las "barricadas" de seguridad del sistema detienen la amenaza en la puerta de entrada, protegiendo la plataforma y la privacidad de los usuarios.
 
 ### Barricada global: ValidationPipe
 
@@ -288,6 +296,8 @@ if (!['jpeg', 'png', 'webp'].includes(metadata.format || ''))
 
 ## Semana 5 — Manejo de Errores y Excepciones
 
+> **En términos sencillos**: En cualquier sistema digital pueden ocurrir imprevistos, como una falla temporal de conexión o un dato que no se encuentra. El principio fundamental aquí es que la aplicación nunca debe "romperse" ni quedarse congelada, ni mostrarle al usuario pantallas confusas con datos técnicos internos del servidor (lo cual además sería un riesgo de seguridad). En su lugar, el sistema intercepta el problema calmadamente, guarda un registro privado para que los ingenieros lo investiguen, y le entrega al usuario una explicación clara, educada y útil.
+
 ### Filtro global de excepciones *(aplicado en este análisis)*
 
 Se creó `apps/api/src/common/filters/http-exception.filter.ts`:
@@ -331,10 +341,10 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 ```
 
 **Principios aplicados**:
-- ✅ Registro estructurado con campos clave-valor
-- ✅ Detalles de errores internos NO expuestos al cliente
-- ✅ Envoltura de excepciones: las no-HTTP se convierten en 500
-- ✅ Antipatrón evitado: ningún `catch {}` vacío en el flujo de manejo
+- Registro estructurado con campos clave-valor
+- Detalles de errores internos NO expuestos al cliente
+- Envoltura de excepciones: las no-HTTP se convierten en 500
+- Antipatrón evitado: ningún `catch {}` vacío en el flujo de manejo
 
 ### Jerarquía de excepciones HTTP
 
@@ -385,6 +395,8 @@ El comentario explica por qué el silencio es seguro: la historia durable (DB) a
 ---
 
 ## Semana 6 — Concurrencia
+
+> **En términos sencillos**: Imagina una cafetería donde entran cientos de personas al mismo tiempo. Si el cajero tuviera que atender a un cliente, preparar su café y esperar a que se lo tome antes de mirar al siguiente, se formaría un embotellamiento interminable. La concurrencia permite que el servidor atienda a miles de usuarios a la vez (enviando mensajes de chat en vivo, viendo el catálogo o dando 'me gusta') de forma paralela y sin demoras, garantizando que los mensajes no se mezclen, no se dupliquen y lleguen de inmediato a quien corresponde.
 
 ### Programación asíncrona (async/await)
 
@@ -471,6 +483,8 @@ if (client.data.presenceRevision !== revision) return { ok: false };
 
 ## Semana 7 — Tolerancia a Fallas y Resiliencia
 
+> **En términos sencillos**: Es el equivalente a los airbags, paracaídas y sistemas de frenos de emergencia de un vehículo. Si una parte secundaria de la plataforma llega a fallar (por ejemplo, si el motor de Inteligencia Artificial que recomienda amigos tarda mucho en responder o el servidor de presencia en vivo se desconecta), la plataforma no colapsa ni muestra pantallas de error. En su lugar, activa automáticamente un "plan B": usa cálculos locales de reserva y mantiene el chat, el catálogo y las funciones principales activas y estables para el usuario.
+
 ### Timeout como circuit breaker (ML Service)
 
 ```typescript
@@ -555,13 +569,169 @@ El guard `if (!realtimeHealth.available)` previene que una dependencia caída ge
 
 | Semana | Tema | Estado | Archivos principales |
 |:---:|---|:---:|---|
-| 1 | Construcción, Reúso y Dependencias | ✅ Presente | `package.json`, `app.module.ts` |
-| 2 | Problemas de Tiempo de Ejecución en OO | ✅ Presente | `chat.gateway.ts`, `main.ts`, todos los módulos |
-| 3 | Desarrollo por Contratos | ✅ Presente | `*.dto.ts`, `users.controller.ts`, `prisma.service.ts` |
-| 4 | Programación Defensiva | ✅ Presente | `main.ts`, `storage.service.ts`, `chat.gateway.ts` |
-| 5 | Manejo de Errores y Excepciones | ✅ Presente + mejorado | `http-exception.filter.ts` *(nuevo)*, `users.service.ts` |
-| 6 | Concurrencia | ✅ Presente | `chat.gateway.ts`, `chat.service.ts`, `users.service.ts` |
-| 7 | Tolerancia a Fallas y Resiliencia | ✅ Presente | `users.service.ts` (ML), `redis-io.adapter.ts` |
+| 1 | Construcción, Reúso y Dependencias | Presente | `package.json`, `app.module.ts` |
+| 2 | Problemas de Tiempo de Ejecución en OO | Presente | `chat.gateway.ts`, `main.ts`, todos los módulos |
+| 3 | Desarrollo por Contratos | Presente | `*.dto.ts`, `users.controller.ts`, `prisma.service.ts` |
+| 4 | Programación Defensiva | Presente | `main.ts`, `storage.service.ts`, `chat.gateway.ts` |
+| 5 | Manejo de Errores y Excepciones | Presente + mejorado | `http-exception.filter.ts` *(nuevo)*, `users.service.ts` |
+| 6 | Concurrencia | Presente | `chat.gateway.ts`, `chat.service.ts`, `users.service.ts` |
+| 7 | Tolerancia a Fallas y Resiliencia | Presente | `users.service.ts` (ML), `redis-io.adapter.ts` |
+
+---
+
+## Pruebas Automatizadas — Evidencia de Resultados
+
+> **En términos sencillos**: Son simulaciones controladas donde un conjunto de robots de software prueba decenas de situaciones reales de manera automática en cuestión de segundos: qué ocurre si alguien ingresa mal su clave, si dos personas chatean al mismo tiempo o si se envían datos incompletos. Esto genera evidencia objetiva de que el software funciona tal como fue diseñado y garantiza que futuras actualizaciones no rompan funcionalidades existentes.
+
+### Suite del Backend (Node.js `node:test`)
+
+**Comando**: `node --test test/*.test.cjs`  
+**Archivos**: 8 suites · 36 casos de prueba  
+**Resultado**: **36 passed · 0 failed** (duración: ~21.5 s)
+
+```
+TAP version 13
+ok  1 - centers landscape and portrait images without stretching            (2.71 ms)
+ok  2 - zoom and extreme drag positions never expose space outside the image (0.51 ms)
+ok  3 - zoom selects the expected portion of the original image             (0.15 ms)
+ok  4 - delivers only to the chosen friend with authenticated sender identity (5.44 ms)
+ok  5 - rejects messages to non-friends and empty messages                  (0.36 ms)
+ok  6 - disconnects expired sessions before sending                         (0.21 ms)
+ok  7 - invalid JWT cannot open a connection                                (0.36 ms)
+ok  8 - does not emit or confirm a message if persistence fails             (0.33 ms)
+ok  9 - history is restricted to authenticated participants and sorted chronologically (1.04 ms)
+ok 10 - permits a product inquiry to its seller even without friendship     (0.36 ms)
+ok 11 - product attachment is snapshotted from the database with the message (0.38 ms)
+ok 12 - cannot attach a product belonging to a different seller             (1.43 ms)
+ok 13 - temporary database authorization failures are returned as retryable errors (0.55 ms)
+ok 14 - same idempotency key cannot be reused for different content        (0.40 ms)
+ok 15 - accepts a signed token and loads the current database identity     (15.37 ms)
+ok 16 - rejects missing, fabricated, expired, wrong-signature and unknown-user tokens (12.09 ms)
+ok 17 - users and posts controllers require JWT authentication              (0.39 ms)
+ok 18 - post creation uses authenticated identity instead of the supplied author (0.45 ms)
+ok 19 - empty database produces an empty marketplace, with no demo fallback (5.21 ms)
+ok 20 - listing uses the actual seller profile, never cached store or verification (1.97 ms)
+ok 21 - create takes the seller from authentication and writes to Prisma   (0.44 ms)
+ok 22 - status changes and deletion require ownership in the database query (2.76 ms)
+ok 23 - API guards and DTO reject forged ownership and invalid prices      (37.46 ms)
+ok 24 - changes only the authenticated user password and stores a bcrypt hash (359.80 ms)
+ok 25 - wrong current password, mismatch and unchanged passwords never write (9.75 ms)
+ok 26 - password request rejects short passwords and foreign user identity fields (10.39 ms)
+ok 27 - normalizes profile fields and allows removing a photo              (12.44 ms)
+ok 28 - rejects blank names, invalid emails, unsafe avatar URLs and privilege edits (5.46 ms)
+ok 29 - updates only the authenticated profile and never selects the password hash (1.93 ms)
+ok 30 - duplicate email returns a conflict without changing the profile    (0.59 ms)
+ok 31 - accepts uploaded avatar URLs on localhost and local IP addresses   (5.15 ms)
+ok 32 - presence tracks real sessions, multiple tabs, disconnects and concurrent retry delivery (4815.36 ms)
+ok 33 - uploads a real image as WebP and retrieves it without original metadata (53.66 ms)
+ok 34 - rejects disguised files, oversized avatars, missing files and invalid destinations (2.51 ms)
+ok 35 - rejects path traversal and unknown media keys                      (1.71 ms)
+ok 36 - HTTP upload requires JWT, accepts multipart images and serves the resulting image (3262.16 ms)
+
+1..36
+# tests 36  # pass 36  # fail 0  # duration_ms 21482.5364
+```
+
+**Cobertura por módulo**:
+
+| Suite | Módulo cubierto | Tests |
+|---|---|---:|
+| `avatar-crop.test.cjs` | Frontend — `squareCrop` utility | 3 |
+| `chat.test.cjs` | Chat Gateway, Chat Service, Chat Controller | 10 |
+| `jwt-auth.test.cjs` | JWT Strategy, Auth Guard, Posts/Users controllers | 4 |
+| `marketplace.test.cjs` | Marketplace Service, Controller, DTOs | 5 |
+| `password.test.cjs` | `changePassword` con bcrypt y optimistic locking | 3 |
+| `profile.test.cjs` | `UpdateProfileDto`, normalización, privilegios | 5 |
+| `realtime.test.cjs` | WebSocket end-to-end: presencia, concurrencia, idempotencia | 1 |
+| `storage.test.cjs` | Storage Service: upload, read, validación, HTTP flow | 4 |
+
+> El test de `realtime.test.cjs` (ok 32) es un escenario de integración completo que
+> levanta un servidor NestJS real, conecta sockets reales y verifica concurrencia con
+> 20 mensajes simultáneos con el mismo `clientMessageId`.
+
+---
+
+### Suite del ML Service (pytest)
+
+**Comando**: `py -m pytest tests/ -v`  
+**Archivos**: `tests/test_recommendations.py` · 13 casos de prueba  
+**Resultado**: **13 passed · 0 failed** (duración: 1.10 s)
+
+```
+============================= test session starts =============================
+platform win32 -- Python 3.14.0, pytest-9.0.0, pluggy-1.6.0
+rootdir: apps/ml-service
+
+tests/test_recommendations.py::test_health_check                           PASSED [  7%]
+tests/test_recommendations.py::test_empty_candidates_returns_empty_list    PASSED [ 15%]
+tests/test_recommendations.py::test_single_candidate_is_scored_and_returned PASSED [ 23%]
+tests/test_recommendations.py::test_shared_tags_increase_score_compared_to_no_tags PASSED [ 30%]
+tests/test_recommendations.py::test_partial_tag_overlap_gives_intermediate_score PASSED [ 38%]
+tests/test_recommendations.py::test_mutual_friends_increase_score          PASSED [ 46%]
+tests/test_recommendations.py::test_recommendation_reason_reflects_mutual_friends PASSED [ 53%]
+tests/test_recommendations.py::test_results_are_sorted_by_score_descending PASSED [ 61%]
+tests/test_recommendations.py::test_limit_parameter_caps_results           PASSED [ 69%]
+tests/test_recommendations.py::test_default_limit_is_12                   PASSED [ 76%]
+tests/test_recommendations.py::test_invalid_internal_token_returns_403     PASSED [ 84%]
+tests/test_recommendations.py::test_missing_token_is_allowed_by_default   PASSED [ 92%]
+tests/test_recommendations.py::test_response_includes_model_version        PASSED [100%]
+
+======================== 13 passed, 1 warning in 1.10s ========================
+```
+
+**Aspectos verificados por las pruebas ML**:
+- Health check del servicio
+- Score en rango `[55, 99]` para cualquier candidato
+- Monotonía de la similitud Jaccard (tags compartidos -> mayor score)
+- Monotonía de la afinidad de grafo (más amigos -> mayor score)
+- Postcondición de `recommendation_reason` con amigos comunes
+- Invariante de ordenamiento descendente por score
+- Parámetro `limit` respetado (5 y default 12)
+- Token interno inválido -> HTTP 403
+- Campo `model_version` presente en respuesta y en cada ítem
+
+---
+
+## Dependencias Transitivas — Análisis de Riesgos
+
+> **En términos sencillos**: Cuando usamos una herramienta de software externa, esa herramienta a su vez depende de otras librerías creadas por terceros (lo que se conoce como dependencias "en cadena" o indirectas). Este análisis es una auditoría completa de esa cadena invisible para garantizar que ninguna pieza oculta contenga fallas de seguridad conocidas, código riesgoso o licencias legales incompatibles con el proyecto.
+
+### API (NestJS / Node.js)
+
+| Dependencia directa | Transitiva clave | Riesgo | Mitigación |
+|---|---|---|---|
+| `sharp ^0.35.5` | `libvips` (binding nativo C ≥ 8.16) | **Medio** — falla en ARM sin prebuild | Usar imagen Docker con prebuild; validado localmente con `sharp.metadata()` |
+| `@nestjs/platform-express` | `multer ^1.4.5-lts` | **Bajo** — CVEs de path traversal ya históricas | `StorageService.validateKey` con regex estricto como barricada adicional |
+| `@nestjs/websockets` | `socket.io ^4.x` → `engine.io ^6.x` | **Bajo** — engine.io v6 parchado | Mantenerse en socket.io 4.x LTS |
+| `@prisma/client ^5.x` | `@prisma/engines` (binarios Rust) | **Bajo** — requiere descarga en `postinstall` | Pre-fetching en CI; imagen Docker con engines en cache |
+| `bcryptjs ^2.4.3` | ninguna (pure JS) | **Muy bajo** — sin deps nativas | Ninguna; librería estable desde 2020 |
+
+### ML Service (Python)
+
+| Dependencia directa | Transitiva clave | Riesgo | Mitigación |
+|---|---|---|---|
+| `scikit-learn ≥1.4` | `numpy ≥1.26`, `scipy ≥1.x` | **Bajo** | Fijar versiones en `requirements.txt` con `==` en producción |
+| `psycopg2-binary ≥2.9.9` | `libpq` (binding C) | **Medio** — binario específico de plataforma | En producción usar `psycopg2` (source build) |
+| `fastapi ≥0.110` | `starlette`, `pydantic ≥2.6` | **Bajo** | Ecosistema muy activo, migraciones bien documentadas |
+
+### Licencias
+
+Todas las dependencias directas usan **MIT, Apache 2.0 o BSD-3**, compatibles
+con uso comercial sin restricciones de copyleft.
+
+---
+
+## Documentación Técnica Complementaria
+
+- **Arquitectura detallada**: [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md)
+  - Diagrama de componentes del sistema
+  - Diagrama de secuencia: envío de mensaje + idempotencia
+  - Diagrama de secuencia: recomendaciones ML con degradación elegante
+  - Modelo de datos (entidades y relaciones clave)
+  - Decisiones de diseño justificadas (monorepo, Redis opcional, ML separado, validación en capas)
+  - Análisis completo de dependencias transitivas y riesgos
+
+- **Guía de configuración de equipo**: [`docs/team-setup.md`](docs/team-setup.md)
 
 ---
 
@@ -575,3 +745,13 @@ Registro del `GlobalHttpExceptionFilter` global con comentarios que documentan s
 
 ### 3. `apps/api/src/modules/users/users.service.ts`
 Comentarios estructurados en el bloque del ml-service que documentan explícitamente los patrones de Semana 7 (timeout, graceful degradation, contrapresión).
+
+### 4. `apps/api/package.json`
+Agregados scripts `"test"` y `"test:watch"` para ejecutar la suite con `node --test`.
+
+### 5. `apps/ml-service/tests/test_recommendations.py` *(archivo nuevo)*
+13 pruebas automatizadas del ML service con `pytest`, cubriendo scoring, ordenamiento, límites, seguridad y estructura de respuesta.
+
+### 6. `docs/architecture/ARCHITECTURE.md` *(archivo nuevo)*
+Documento técnico de arquitectura con diagramas de componentes, secuencias, modelo de datos y decisiones de diseño.
+
