@@ -1,5 +1,5 @@
 'use client';
-import React, { Suspense, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import PresenceDot, { presenceLabel } from '@/components/profile/PresenceDot';
 import { useAuth } from '@/lib/auth-context';
@@ -29,6 +29,7 @@ function MensajesContent() {
   const [contactsError, setContactsError] = useState('');
   const sendingRef = useRef(false);
   const [text, setText] = useState('');
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
   const [typingId, setTypingId] = useState('');
@@ -181,12 +182,25 @@ function MensajesContent() {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, selectedId]);
   useEffect(() => () => { if (typingTimer.current) clearTimeout(typingTimer.current); }, []);
   const selected = friends.find(friend => friend.id === selectedId);
+  useLayoutEffect(() => {
+    const input = messageInputRef.current;
+    if (!input) return;
+    const resize = () => {
+      input.style.height = 'auto';
+      const height = input.scrollHeight + 2;
+      input.style.height = `${Math.min(height, 160)}px`;
+      input.style.overflowY = height > 160 ? 'auto' : 'hidden';
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, [text, selected?.id]);
   const currentMessages = messages.filter(message =>
     (message.senderId === user?.id && message.recipientId === selectedId) ||
     (message.senderId === selectedId && message.recipientId === user?.id));
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selected || !text.trim() || sendingRef.current) return;
+    if (!selected || !connected || !text.trim() || sendingRef.current) return;
     sendingRef.current = true;
     const recipientId = selected.id;
     setSending(true); setError('');
@@ -294,9 +308,25 @@ function MensajesContent() {
             {draftProduct.image && <img src={draftProduct.image} alt={draftProduct.name} className="w-20 h-20 rounded-lg object-contain bg-white" />}
             <div className="min-w-0"><p className="text-xs text-gray-500">Producto adjunto al mensaje</p><p className="font-medium break-words">{draftProduct.name}</p></div>
           </div>}
-          <form onSubmit={submit} className="border-t p-4 flex gap-2">
-            <textarea disabled={sending} rows={3} aria-label="Mensaje" maxLength={5000} value={text} placeholder="Escribe un mensaje..." onChange={e => { setText(e.target.value); sendTyping(selected.id, !!e.target.value.trim()); }} className="border rounded-lg p-3 flex-1 min-w-0" />
-            <button disabled={!connected || sending || !text.trim()} className="bg-blue-700 text-white rounded-lg px-4 disabled:opacity-50">{sending ? 'Enviando...' : 'Enviar'}</button>
+          <form onSubmit={submit} className="border-t p-4 flex items-end gap-2">
+            <textarea
+              ref={messageInputRef}
+              disabled={sending}
+              rows={1}
+              aria-label="Mensaje"
+              maxLength={5000}
+              value={text}
+              placeholder="Escribe un mensaje..."
+              onChange={e => { setText(e.target.value); sendTyping(selected.id, !!e.target.value.trim()); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  if (!e.repeat) e.currentTarget.form?.requestSubmit();
+                }
+              }}
+              className="border rounded-lg px-3 py-2.5 leading-[22px] flex-1 min-w-0 min-h-11 max-h-40 resize-none overflow-y-hidden"
+            />
+            <button type="submit" disabled={!connected || sending || !text.trim()} className="bg-blue-700 text-white rounded-lg h-11 w-28 shrink-0 disabled:opacity-50">{sending ? 'Enviando...' : 'Enviar'}</button>
           </form>
         </> : <p className="m-auto p-8 text-gray-500">{missingTarget ? 'Este contacto no tiene una conversacion contigo. Abre su producto desde el marketplace.' : 'Selecciona un contacto para conversar.'}</p>}
       </section>

@@ -386,14 +386,6 @@ export default function Header() {
                             <span className="font-semibold text-sm text-gray-900 truncate">
                               {person.name}
                             </span>
-                            {person.isVerified && (
-                              <span
-                                className="material-symbols-outlined text-blue-500 text-[15px] shrink-0"
-                                title="Verificado"
-                              >
-                                verified
-                              </span>
-                            )}
                           </div>
                           <div className="flex items-center gap-2 text-xs text-gray-500 truncate">
                             <span>{person.email}</span>
@@ -604,11 +596,6 @@ export default function Header() {
                               <span className="font-semibold text-sm text-gray-900 truncate group-hover:text-primary-container">
                                 {req.requester?.name || 'Usuario Promexa'}
                               </span>
-                              {req.requester?.isVerified && (
-                                <span className="material-symbols-outlined text-blue-500 text-[14px]">
-                                  verified
-                                </span>
-                              )}
                             </Link>
 
                             {req.type === 'FRIEND_ACCEPTED' ? (
@@ -715,15 +702,6 @@ export default function Header() {
                     <span className="font-body-md-medium text-body-md-medium text-on-surface">
                       {user.name}
                     </span>
-                    {user.isVerified && (
-                      <span
-                        className="material-symbols-outlined text-primary-container text-[16px]"
-                        style={{ fontVariationSettings: "'FILL' 1" }}
-                        title="Verificado"
-                      >
-                        verified
-                      </span>
-                    )}
                   </div>
                 </div>
                 <span className="material-symbols-outlined text-outline text-[20px] group-hover:text-on-surface transition-colors">

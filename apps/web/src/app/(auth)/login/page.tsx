@@ -140,15 +140,15 @@ export default function LoginPage() {
             <div className="flex items-start gap-3.5 group">
               <div className="w-10 h-10 rounded-lg bg-on-primary/15 backdrop-blur-sm flex items-center justify-center shrink-0 group-hover:bg-on-primary/25 transition-colors border border-white/10">
                 <span className="material-symbols-outlined text-tertiary-fixed text-[22px]">
-                  verified_user
+                  groups
                 </span>
               </div>
               <div>
                 <p className="font-body-md-medium text-body-md-medium text-on-primary font-semibold">
-                  Comunidad con perfiles de negocios verificados
+                  Comunidad de personas y negocios locales
                 </p>
                 <p className="font-body-md text-body-md text-on-primary-container mt-0.5">
-                  Validación rigurosa de identidad fiscal y comercial para compras con total confianza.
+                  Conecta con emprendedores de tu comunidad y consulta sus productos directamente por chat.
                 </p>
               </div>
             </div>

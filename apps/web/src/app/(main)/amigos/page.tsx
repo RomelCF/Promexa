@@ -54,8 +54,9 @@ export default function AmigosPage() {
   const { user, token } = useAuth();
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<'recommended' | 'friends' | 'requests'>('recommended');
+  const [activeTab, setActiveTab] = useState<'recommended' | 'friends' | 'requests'>('friends');
   const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [friendsError, setFriendsError] = useState('');
   const [recommended, setRecommended] = useState<RecommendedUser[]>([]);
   const [requests, setRequests] = useState<PendingRequest[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,12 +107,15 @@ export default function AmigosPage() {
     try {
       const res = await fetch('/api/users/friends', {
         headers: { Authorization: `Bearer ${authToken}` },
+        cache: 'no-store',
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) setFriends(data);
-      }
+      if (!res.ok) throw new Error('No se pudieron cargar tus amigos.');
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error('Respuesta de amigos inválida.');
+      setFriends(data);
+      setFriendsError('');
     } catch (e) {
+      setFriendsError('No se pudieron cargar tus amigos. Reintentando...');
       console.error('Error fetching friends:', e);
     }
   }, [token]);
@@ -333,7 +337,7 @@ export default function AmigosPage() {
   );
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6 animate-fadeIn">
+    <div className="w-full max-w-4xl mx-auto px-4 py-6 space-y-5 animate-fadeIn">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-sm animate-bounce">
@@ -342,57 +346,17 @@ export default function AmigosPage() {
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="bg-surface-container-lowest border border-surface-container/60 rounded-2xl p-6 sm:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-3xl">group</span>
-            <h1 className="text-2xl sm:text-3xl font-bold text-on-surface">Amigos y Conexiones</h1>
-          </div>
-          <p className="text-sm text-on-surface-variant max-w-xl">
-            Gestiona tu red de contactos, chatea en tiempo real y descubre nuevas personas recomendadas por el motor de afinidad de Machine Learning.
-          </p>
+      <header className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-on-surface">Mis amigos</h1>
+          <p className="mt-1 text-sm text-on-surface-variant">{friends.length} {friends.length === 1 ? 'amigo' : 'amigos'}</p>
         </div>
-
-        {/* Resumen numérico */}
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="flex-1 md:flex-initial bg-surface-container-low px-4 py-3 rounded-xl text-center border border-surface-container/40">
-            <p className="text-2xl font-bold text-primary">{friends.length}</p>
-            <p className="text-xs text-on-surface-variant font-medium">Amigos</p>
-          </div>
-          <div className="flex-1 md:flex-initial bg-surface-container-low px-4 py-3 rounded-xl text-center border border-surface-container/40">
-            <p className="text-2xl font-bold text-emerald-600">{recommended.length}</p>
-            <p className="text-xs text-on-surface-variant font-medium">Sugeridos</p>
-          </div>
-          {requests.length > 0 && (
-            <div className="flex-1 md:flex-initial bg-red-50 px-4 py-3 rounded-xl text-center border border-red-200">
-              <p className="text-2xl font-bold text-red-600 animate-pulse">{requests.length}</p>
-              <p className="text-xs text-red-700 font-medium">Solicitudes</p>
-            </div>
-          )}
-        </div>
-      </div>
+      </header>
 
       {/* Controles: Tabs y Buscador */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+      <div className="flex flex-col items-stretch gap-3">
         {/* Tabs de navegación */}
         <div className="flex items-center gap-1.5 bg-surface-container-lowest p-1.5 rounded-xl border border-surface-container/60 shadow-xs overflow-x-auto">
-          <button
-            type="button"
-            onClick={() => setActiveTab('recommended')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
-              activeTab === 'recommended'
-                ? 'bg-primary-container text-on-primary shadow-sm'
-                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-            <span>Recomendados por ML</span>
-            <span className="px-2 py-0.5 rounded-full text-[11px] bg-white/20 font-bold">
-              {recommended.length}
-            </span>
-          </button>
-
           <button
             type="button"
             onClick={() => setActiveTab('friends')}
@@ -406,6 +370,22 @@ export default function AmigosPage() {
             <span>Mis Amigos</span>
             <span className="px-2 py-0.5 rounded-full text-[11px] bg-white/20 font-bold">
               {friends.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('recommended')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
+              activeTab === 'recommended'
+                ? 'bg-primary-container text-on-primary shadow-sm'
+                : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+            <span>Sugerencias</span>
+            <span className="px-2 py-0.5 rounded-full text-[11px] bg-white/20 font-bold">
+              {recommended.length}
             </span>
           </button>
 
@@ -429,7 +409,7 @@ export default function AmigosPage() {
         </div>
 
         {/* Buscador de amigos */}
-        <div className="relative sm:w-72">
+        <div className="relative w-full">
           <span className="material-symbols-outlined absolute left-3 top-2.5 text-outline text-[18px]">
             search
           </span>
@@ -549,15 +529,6 @@ export default function AmigosPage() {
                           >
                             {person.name}
                           </h4>
-                          {person.isVerified && (
-                            <span
-                              className="material-symbols-outlined text-primary-container text-[17px] shrink-0"
-                              style={{ fontVariationSettings: "'FILL' 1" }}
-                              title="Verificado"
-                            >
-                              verified
-                            </span>
-                          )}
                         </div>
 
                         {/* Motivo de recomendación */}
@@ -649,17 +620,20 @@ export default function AmigosPage() {
       {/* 2. TAB: MIS AMIGOS */}
       {activeTab === 'friends' && (
         <div className="space-y-4">
+          {friendsError && <p role="alert" className="text-sm text-red-700">{friendsError}</p>}
           {loading ? (
             <div className="p-12 text-center text-on-surface-variant flex flex-col items-center gap-3">
               <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
               <p className="text-sm">Cargando tu lista de amigos...</p>
             </div>
+          ) : friendsError && friends.length === 0 ? null : filteredFriends.length === 0 && searchQuery.trim() ? (
+            <p className="p-8 text-center text-on-surface-variant">No hay amigos que coincidan con tu búsqueda.</p>
           ) : filteredFriends.length === 0 ? (
             <div className="bg-surface-container-lowest rounded-2xl p-12 text-center border border-surface-container/60 shadow-xs">
               <span className="material-symbols-outlined text-5xl text-outline mb-3 block">person_off</span>
               <h3 className="text-base font-semibold text-on-surface">Aún no tienes amigos agregados</h3>
               <p className="text-xs text-on-surface-variant mt-1 max-w-sm mx-auto">
-                Explora la pestaña <strong>Recomendados por ML</strong> para enviar solicitudes de amistad y comenzar a conversar.
+                Explora la pestaña <strong>Sugerencias</strong> para enviar solicitudes de amistad y comenzar a conversar.
               </p>
               <button
                 type="button"
@@ -670,18 +644,18 @@ export default function AmigosPage() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="max-h-[65vh] overflow-y-auto overscroll-contain rounded-2xl border border-surface-container/70 bg-surface-container-lowest divide-y divide-surface-container/70">
               {filteredFriends.map((friend) => {
                 const isOnline = presence[friend.id];
 
                 return (
                   <div
                     key={friend.id}
-                    className="bg-surface-container-lowest border border-surface-container/70 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all flex items-center justify-between gap-4 group"
+                    className="px-4 py-3 hover:bg-surface-container-low transition-colors flex items-center justify-between gap-3 group"
                   >
-                    <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="flex flex-1 items-center gap-3 min-w-0">
                       <div
-                        className="relative cursor-pointer shrink-0"
+                        className="relative w-12 h-12 cursor-pointer shrink-0"
                         onClick={() =>
                           setSelectedProfile({
                             id: friend.id,
@@ -695,7 +669,7 @@ export default function AmigosPage() {
                         <UserAvatar
                           src={friend.avatar || ''}
                           alt={friend.name}
-                          className="w-13 h-13 rounded-full object-cover ring-2 ring-emerald-200 group-hover:ring-emerald-500 transition-all"
+                          className="w-12 h-12 rounded-full object-cover"
                         />
                         <PresenceDot
                           online={isOnline}
@@ -703,7 +677,7 @@ export default function AmigosPage() {
                         />
                       </div>
 
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <h4
                             className="font-bold text-sm text-on-surface truncate cursor-pointer hover:text-primary transition-colors"
@@ -719,22 +693,12 @@ export default function AmigosPage() {
                           >
                             {friend.name}
                           </h4>
-                          {friend.isVerified && (
-                            <span
-                              className="material-symbols-outlined text-primary-container text-[16px] shrink-0"
-                              style={{ fontVariationSettings: "'FILL' 1" }}
-                              title="Verificado"
-                            >
-                              verified
-                            </span>
-                          )}
                         </div>
 
                         <p className="text-xs text-outline truncate">{friend.email}</p>
 
-                        <div className="flex items-center gap-1 text-[11px] font-medium text-emerald-700 mt-1">
-                          <span className="material-symbols-outlined text-[13px]">how_to_reg</span>
-                          <span>Amigo conectado</span>
+                        <div className="text-xs text-outline mt-0.5">
+                          <span>{isOnline === true ? 'En línea' : isOnline === false ? 'Desconectado' : 'Estado no disponible'}</span>
                         </div>
                       </div>
                     </div>
@@ -786,11 +750,6 @@ export default function AmigosPage() {
                           <span className="font-bold text-sm text-on-surface truncate">
                             {requester?.name || 'Usuario Promexa'}
                           </span>
-                          {requester?.isVerified && (
-                            <span className="material-symbols-outlined text-blue-500 text-[15px]">
-                              verified
-                            </span>
-                          )}
                         </div>
                         <p className="text-xs text-on-surface-variant mt-0.5">
                           Te envió una solicitud de amistad
@@ -853,7 +812,7 @@ export default function AmigosPage() {
                 <div className="relative">
                   <UserAvatar
                     alt={selectedProfile.name}
-                    className="w-22 h-22 rounded-full object-cover ring-4 ring-surface-container-lowest shadow-md bg-white"
+                    className="w-20 h-20 rounded-full object-cover ring-4 ring-surface-container-lowest shadow-md bg-white"
                     src={selectedProfile.avatar || ''}
                   />
                   <PresenceDot
@@ -864,9 +823,9 @@ export default function AmigosPage() {
 
                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-surface-container text-on-surface-variant flex items-center gap-1">
                   <span className="material-symbols-outlined text-[14px]">
-                    {selectedProfile.isVerified ? 'verified' : 'person'}
+                    person
                   </span>
-                  <span>{selectedProfile.isVerified ? 'Verificado' : 'Miembro'}</span>
+                  <span>Miembro</span>
                 </span>
               </div>
 
@@ -874,14 +833,6 @@ export default function AmigosPage() {
               <div className="flex flex-col">
                 <div className="flex items-center gap-1.5">
                   <h3 className="text-xl text-on-surface font-bold">{selectedProfile.name}</h3>
-                  {selectedProfile.isVerified && (
-                    <span
-                      className="material-symbols-outlined text-primary-container text-[18px]"
-                      style={{ fontVariationSettings: "'FILL' 1" }}
-                    >
-                      verified
-                    </span>
-                  )}
                 </div>
                 <span className="text-xs text-outline">
                   @{selectedProfile.name.toLowerCase().replace(/\s+/g, '')}

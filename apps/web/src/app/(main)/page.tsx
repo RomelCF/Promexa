@@ -611,15 +611,6 @@ export default function HomePage() {
                   <span className="font-headline-sm text-headline-sm text-on-surface truncate font-semibold">
                     {user?.name || 'Usuario'}
                   </span>
-                  {user?.isVerified && (
-                    <span
-                      className="material-symbols-outlined text-primary-container text-[18px] shrink-0"
-                      style={{ fontVariationSettings: "'FILL' 1" }}
-                      title="Negocio Verificado"
-                    >
-                      verified
-                    </span>
-                  )}
                 </div>
                 <span className="font-caption text-caption text-outline truncate">
                   {user?.email || ''} · {user?.profileType === 'business' ? 'Negocio Local' : 'Usuario'}
@@ -953,15 +944,6 @@ export default function HomePage() {
                       >
                         {post.author}
                       </span>
-                      {post.isVerified && (
-                        <span
-                          className="material-symbols-outlined text-primary-container text-[18px]"
-                          style={{ fontVariationSettings: "'FILL' 1" }}
-                          title="Negocio Verificado"
-                        >
-                          verified
-                        </span>
-                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-caption text-caption text-outline">{post.time}</span>
@@ -1148,14 +1130,6 @@ export default function HomePage() {
                           >
                             {comment.author}
                           </span>
-                          {comment.isVerified && (
-                            <span
-                              className="material-symbols-outlined text-primary-container text-[14px]"
-                              style={{ fontVariationSettings: "'FILL' 1" }}
-                            >
-                              verified
-                            </span>
-                          )}
                         </div>
                         <span className="font-caption text-caption text-outline">{comment.time}</span>
                       </div>
@@ -1259,11 +1233,6 @@ export default function HomePage() {
                           <span className="font-body-md-medium text-body-md-medium text-on-surface truncate font-semibold group-hover:text-primary transition-colors">
                             {contact.name}
                           </span>
-                          {contact.isVerified && (
-                            <span className="material-symbols-outlined text-primary-container text-[14px]">
-                              verified
-                            </span>
-                          )}
                         </div>
                         <span className="font-caption text-caption text-outline truncate">
                           {contact.mutualCount} contactos en común
@@ -1383,9 +1352,9 @@ export default function HomePage() {
                 {/* Badge de tipo de perfil */}
                 <span className="px-3 py-1 rounded-full font-label-sm text-label-sm bg-surface-container text-on-surface-variant font-medium flex items-center gap-1">
                   <span className="material-symbols-outlined text-[14px]">
-                    {selectedProfile.isVerified ? 'store' : 'person'}
+                    person
                   </span>
-                  <span>{selectedProfile.isVerified ? 'Negocio Verificado' : 'Miembro Promexa'}</span>
+                  <span>Miembro Promexa</span>
                 </span>
               </div>
 
@@ -1395,15 +1364,6 @@ export default function HomePage() {
                   <h3 className="font-headline-sm text-xl text-on-surface font-bold">
                     {selectedProfile.name}
                   </h3>
-                  {selectedProfile.isVerified && (
-                    <span
-                      className="material-symbols-outlined text-primary-container text-[20px]"
-                      style={{ fontVariationSettings: "'FILL' 1" }}
-                      title="Verificado"
-                    >
-                      verified
-                    </span>
-                  )}
                 </div>
                 <span className="font-body-md text-sm text-outline">
                   {selectedProfile.handle || `@${selectedProfile.name.toLowerCase().replace(/\s+/g, '')}`}

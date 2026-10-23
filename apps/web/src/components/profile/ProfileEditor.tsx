@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import PasswordEditor from './PasswordEditor';
 import UserAvatar from './UserAvatar';
 import AvatarCropper from './AvatarCropper';
+import CoverCropper from './CoverCropper';
 import ImagePicker from './ImagePicker';
 import { uploadImage } from '@/lib/upload-image';
 import { useAuth } from '@/lib/auth-context';
@@ -18,6 +19,7 @@ export default function ProfileEditor({ onSaved }: { onSaved?: () => void }) {
   const [photo, setPhoto] = useState<File | null>(null);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverCropFile, setCoverCropFile] = useState<File | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -32,13 +34,14 @@ export default function ProfileEditor({ onSaved }: { onSaved?: () => void }) {
     setPhoto(null);
     setCropFile(null);
     setCoverFile(null);
+    setCoverCropFile(null);
     setError('');
     setSuccess('');
   };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (saving || cropFile) return;
+    if (saving || cropFile || coverCropFile) return;
     setSaving(true);
     setError('');
     setSuccess('');
@@ -133,7 +136,11 @@ export default function ProfileEditor({ onSaved }: { onSaved?: () => void }) {
             </div>
           </div>
 
-          <ImagePicker
+          {coverCropFile ? <CoverCropper
+            file={coverCropFile}
+            onCancel={() => setCoverCropFile(null)}
+            onApply={file => { setCoverFile(file); setCoverCropFile(null); setSuccess(''); }}
+          /> : <ImagePicker
             label="Seleccionar portada"
             file={coverFile}
             src={coverImage}
@@ -141,7 +148,7 @@ export default function ProfileEditor({ onSaved }: { onSaved?: () => void }) {
             aspect="cover"
             disabled={saving}
             onChange={(file) => {
-              setCoverFile(file);
+              setCoverCropFile(file);
               setSuccess('');
             }}
             onRemove={() => {
@@ -149,7 +156,7 @@ export default function ProfileEditor({ onSaved }: { onSaved?: () => void }) {
               setCoverImage('');
               setSuccess('');
             }}
-          />
+          />}
         </section>
       </div>
 
@@ -256,7 +263,7 @@ export default function ProfileEditor({ onSaved }: { onSaved?: () => void }) {
             </button>
             <button
               type="submit"
-              disabled={saving || !!cropFile || !name.trim()}
+              disabled={saving || !!cropFile || !!coverCropFile || !name.trim()}
               className="px-5 py-2.5 rounded-xl bg-primary-container text-white text-sm font-semibold hover:bg-primary disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm"
             >
               {saving ? (

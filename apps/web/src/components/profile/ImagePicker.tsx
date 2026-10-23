@@ -16,7 +16,7 @@ export default function ImagePicker({ file, src, onChange, onRemove, maxMB, disa
   return <div className="space-y-2">
     {(preview || src) && (
       aspect === 'cover' ? (
-        <div className="w-full aspect-[16/6] max-h-48 rounded-xl overflow-hidden bg-surface-container relative border border-outline-variant/40 shadow-inner">
+        <div className="w-full aspect-[4.5/1] rounded-xl overflow-hidden bg-surface-container relative border border-outline-variant/40 shadow-inner">
           <img src={preview || src} alt="Vista previa de portada" className="w-full h-full object-cover" />
         </div>
       ) : (

@@ -60,7 +60,6 @@ export default function MarketplacePage() {
   const [selectedDistrict, setSelectedDistrict] = useState<string>('Todos los distritos');
   const [minPrice, setMinPrice] = useState<string>('');
   const [maxPrice, setMaxPrice] = useState<string>('');
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [sortBy, setSortBy] = useState<string>('recent');
   const [favoriteIds, setFavoriteIds] = useState<{ [id: string]: boolean }>({});
@@ -182,7 +181,6 @@ export default function MarketplacePage() {
     setSelectedDistrict('Todos los distritos');
     setMinPrice('');
     setMaxPrice('');
-    setVerifiedOnly(false);
     setOnlyFavorites(false);
     setSortBy('recent');
     showToast('Filtros restablecidos');
@@ -209,11 +207,6 @@ export default function MarketplacePage() {
 
         // Distrito
         if (selectedDistrict !== 'Todos los distritos' && p.district !== selectedDistrict) {
-          return false;
-        }
-
-        // Negocios verificados
-        if (verifiedOnly && !p.isVerified) {
           return false;
         }
 
@@ -246,7 +239,6 @@ export default function MarketplacePage() {
     searchQuery,
     selectedCategory,
     selectedDistrict,
-    verifiedOnly,
     onlyFavorites,
     minPrice,
     maxPrice,
@@ -518,36 +510,6 @@ export default function MarketplacePage() {
             </div>
           </div>
 
-          <div className="h-px bg-surface-container" />
-
-          {/* Toggle: Negocios verificados */}
-          <div className="bg-surface-container-low p-3 rounded-lg flex items-center justify-between gap-2 border border-surface-container">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[14px]">verified</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="font-label-md text-label-md text-on-surface font-medium">
-                  Negocios verificados
-                </span>
-                <span className="font-caption text-caption text-outline">Perfiles verificados</span>
-              </div>
-            </div>
-            <button
-              className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer shrink-0 focus:outline-none ${
-                verifiedOnly ? 'bg-primary-container' : 'bg-surface-variant'
-              }`}
-              type="button"
-              onClick={() => setVerifiedOnly(!verifiedOnly)}
-              title={verifiedOnly ? 'Ver todos los comercios' : 'Filtrar solo comercios verificados'}
-            >
-              <span
-                className={`absolute top-1 w-4 h-4 rounded-full bg-on-primary transition-all shadow-sm ${
-                  verifiedOnly ? 'left-6' : 'left-1'
-                }`}
-              />
-            </button>
-          </div>
         </aside>
 
         {/* CONTENIDO DERECHA: Carrusel + Catálogo */}
@@ -562,7 +524,6 @@ export default function MarketplacePage() {
               {(selectedCategory !== 'Todas' ||
                 selectedDistrict !== 'Todos los distritos' ||
                 searchQuery ||
-                verifiedOnly ||
                 onlyFavorites) && (
                 <span className="text-caption text-outline">
                   (Filtros activos)
@@ -703,15 +664,6 @@ export default function MarketplacePage() {
                         <span className="font-label-sm text-label-sm text-on-surface-variant truncate">
                           {product.store}
                         </span>
-                        {product.isVerified && (
-                          <span
-                            className="material-symbols-outlined text-primary-container text-[15px] shrink-0"
-                            style={{ fontVariationSettings: "'FILL' 1" }}
-                            title="Perfil verificado"
-                          >
-                            verified
-                          </span>
-                        )}
                       </div>
 
                       {/* Botón de Contacto Rápido */}
@@ -976,14 +928,6 @@ export default function MarketplacePage() {
                         <span className="font-body-md-medium text-body-md-medium text-on-surface font-semibold">
                           {selectedProduct.store}
                         </span>
-                        {selectedProduct.isVerified && (
-                          <span
-                            className="material-symbols-outlined text-primary text-[16px]"
-                            title="Comercio Verificado Promexa"
-                          >
-                            verified
-                          </span>
-                        )}
                       </div>
                       <span className="font-caption text-caption text-outline">
                         {selectedProduct.district} · Ventas seguras en Promexa

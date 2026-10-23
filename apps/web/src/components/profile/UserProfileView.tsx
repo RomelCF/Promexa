@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import UserAvatar from '@/components/profile/UserAvatar';
 import ProfileEditor from '@/components/profile/ProfileEditor';
+import CoverCropper from '@/components/profile/CoverCropper';
 import { uploadImage } from '@/lib/upload-image';
 
 export interface UserProfileData {
@@ -96,6 +97,7 @@ export default function UserProfileView({ userId }: { userId: string }) {
 
   // Quick cover / avatar direct upload
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const [coverCropFile, setCoverCropFile] = useState<File | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -231,11 +233,19 @@ export default function UserProfileView({ userId }: { userId: string }) {
   };
 
   // Carga rápida de portada desde el botón en el banner
-  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !token) return;
+    if (!/\.(jpe?g|jfif|png|webp)$/i.test(file.name) || file.size > 10 * 1024 * 1024) {
+      showToast('Selecciona una imagen JPG, PNG o WebP de hasta 10 MB.');
+      return;
+    }
+    setCoverCropFile(file);
+  };
 
+  const saveCover = async (file: File) => {
+    if (!token || uploadingCover) return;
     setUploadingCover(true);
     try {
       const coverUrl = await uploadImage(file, 'cover', token);
@@ -253,9 +263,11 @@ export default function UserProfileView({ userId }: { userId: string }) {
           user: { ...profileData.user, coverImage: coverUrl },
         });
       }
+      setCoverCropFile(null);
       showToast('¡Foto de portada actualizada!');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Error al subir la portada');
+      throw err;
     } finally {
       setUploadingCover(false);
     }
@@ -406,6 +418,7 @@ export default function UserProfileView({ userId }: { userId: string }) {
 
   return (
     <div className="w-full pb-16 bg-[#F8F9FA] min-h-screen">
+      {coverCropFile && <CoverCropper modal file={coverCropFile} onApply={saveCover} onCancel={() => setCoverCropFile(null)} />}
       {/* Toast de confirmación */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 text-sm animate-fade-in border border-gray-700">
@@ -439,7 +452,7 @@ export default function UserProfileView({ userId }: { userId: string }) {
       <div className="bg-white border-b border-outline-variant/40 shadow-xs">
         <div className="max-w-6xl mx-auto">
           {/* BANNER DE PORTADA (COVER PHOTO) */}
-          <div className="relative w-full h-52 sm:h-72 md:h-96 rounded-b-2xl overflow-hidden bg-gradient-to-r from-blue-900 via-indigo-800 to-primary-container shadow-inner group">
+          <div className="relative w-full h-40 sm:h-56 md:h-64 rounded-b-2xl overflow-hidden bg-gradient-to-r from-blue-900 via-indigo-800 to-primary-container shadow-inner group">
             {user.coverImage ? (
               <img
                 src={user.coverImage}
@@ -481,12 +494,12 @@ export default function UserProfileView({ userId }: { userId: string }) {
           </div>
 
           {/* BARRA DE PERFIL INFERIOR (AVATAR + NOMBRES + BOTONES) */}
-          <div className="px-4 sm:px-8 pb-4">
-            <div className="flex flex-col md:flex-row items-center md:items-end justify-between gap-4 -mt-16 sm:-mt-20 md:-mt-24 mb-4">
+          <div className="px-4 sm:px-8 pt-4 pb-4">
+            <div className="flex flex-col md:flex-row items-center md:items-end justify-between gap-4 mb-4">
               {/* Avatar y Nombres */}
               <div className="flex flex-col md:flex-row items-center md:items-end gap-4 sm:gap-6 text-center md:text-left">
                 {/* Avatar circular con borde prominente */}
-                <div className="relative group">
+                <div className="relative z-10 shrink-0 -mt-16 sm:-mt-20 md:-mt-24 group">
                   <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-44 md:h-44 rounded-full ring-4 ring-white bg-white shadow-xl overflow-hidden flex items-center justify-center">
                     <UserAvatar
                       src={user.avatar || undefined}
@@ -526,15 +539,6 @@ export default function UserProfileView({ userId }: { userId: string }) {
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-on-surface tracking-tight">
                       {user.name}
                     </h1>
-                    {user.isVerified && (
-                      <span
-                        className="material-symbols-outlined text-primary-container text-2xl"
-                        style={{ fontVariationSettings: "'FILL' 1" }}
-                        title="Perfil verificado"
-                      >
-                        verified
-                      </span>
-                    )}
                   </div>
 
                   <p className="text-sm font-medium text-outline">
@@ -970,14 +974,6 @@ export default function UserProfileView({ userId }: { userId: string }) {
                         <div>
                           <div className="flex items-center gap-1.5">
                             <span className="font-bold text-sm text-on-surface">{post.author}</span>
-                            {post.isVerified && (
-                              <span
-                                className="material-symbols-outlined text-primary-container text-[16px]"
-                                style={{ fontVariationSettings: "'FILL' 1" }}
-                              >
-                                verified
-                              </span>
-                            )}
                           </div>
                           <div className="flex items-center gap-2 text-xs text-outline">
                             <span>{post.time}</span>
@@ -1176,14 +1172,6 @@ export default function UserProfileView({ userId }: { userId: string }) {
                           <span className="font-bold text-sm text-on-surface truncate group-hover:text-primary-container">
                             {friend.name}
                           </span>
-                          {friend.isVerified && (
-                            <span
-                              className="material-symbols-outlined text-primary-container text-[15px]"
-                              style={{ fontVariationSettings: "'FILL' 1" }}
-                            >
-                              verified
-                            </span>
-                          )}
                         </div>
                         <span className="text-xs text-outline block truncate">
                           {friend.profileType === 'business' ? 'Negocio' : 'Miembro'}
@@ -1264,19 +1252,6 @@ export default function UserProfileView({ userId }: { userId: string }) {
                     <span className="text-xs text-outline block">Tipo de cuenta</span>
                     <span className="font-semibold text-on-surface capitalize">
                       {user.profileType === 'business' ? 'Cuenta de Negocio / Empresa' : 'Cuenta Personal'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-outline block">Estado de verificación</span>
-                    <span className="font-semibold text-on-surface flex items-center gap-1 mt-0.5">
-                      {user.isVerified ? (
-                        <>
-                          <span className="material-symbols-outlined text-primary-container text-[16px]">verified</span>
-                          <span>Verificado por Promexa</span>
-                        </>
-                      ) : (
-                        <span>En proceso de verificación</span>
-                      )}
                     </span>
                   </div>
                   <div>
