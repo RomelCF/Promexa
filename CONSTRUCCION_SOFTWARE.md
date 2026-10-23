@@ -22,6 +22,8 @@ Documento que relaciona los siete temas del curso con el código real del proyec
 
 ## Semana 1 — Construcción, Reúso y Dependencias
 
+> **En términos sencillos**: En lugar de programar cada función desde cero (lo que tomaría años y aumentaría el riesgo de errores), el sistema aprovecha herramientas y librerías reconocidas y probadas en la industria (como bases de datos, sistemas de contraseñas y frameworks web). Es semejante a construir una casa utilizando piezas prefabricadas y certificadas: cada módulo tiene una tarea específica, permitiendo que el proyecto crezca de forma ordenada, segura y fácil de mantener sin romper el resto.
+
 ### Gestión de dependencias con pnpm
 
 Promexa usa **pnpm workspaces** como gestor de paquetes monorepo.
@@ -84,6 +86,8 @@ apps/api/src/
 
 ## Semana 2 — Problemas de Tiempo de Ejecución en OO
 
+> **En términos sencillos**: Cuando un programa está ejecutándose en tiempo real, sus diferentes partes deben coordinarse e intercambiar información sin entorpecerse. En lugar de que los componentes estén "soldados" entre sí de manera rígida, el sistema funciona como una central telefónica inteligente: conecta las piezas adecuadas en el momento exacto en que se necesitan. Esto evita que la aplicación sea frágil y previene fallos inesperados si un servicio secundario cambia o no está disponible en ese instante.
+
 ### Polimorfismo e inyección de dependencias en NestJS
 
 NestJS implementa **enlace dinámico** a través de su contenedor de IoC.
@@ -144,6 +148,8 @@ Si Redis no está configurado, el sistema arranca sin el adaptador. Enlace tard�
 ---
 
 ## Semana 3 — Desarrollo por Contratos
+
+> **En términos sencillos**: Funciona igual que un contrato legal o los términos de un acuerdo. Antes de que el sistema acepte procesar cualquier solicitud (como registrar una cuenta, enviar un mensaje o publicar un producto en venta), verifica de forma automática que los datos cumplan estrictamente con reglas claras pactadas de antemano: que el correo tenga un formato válido, que la contraseña sea lo bastante larga o que un precio no sea negativo. Si no se cumplen las condiciones del contrato, la petición se rechaza de inmediato antes de que pueda desordenar o dañar la información del sistema.
 
 ### DTOs como contratos de interfaz con precondiciones ejecutables
 
@@ -214,6 +220,8 @@ export class PrismaService extends PrismaClient
 ---
 
 ## Semana 4 — Programación Defensiva
+
+> **En términos sencillos**: Este apartado sigue la regla de "desconfiar por defecto". Es similar al filtro de seguridad o la aduana de un aeropuerto: cualquier dato o archivo que provenga de internet o de un usuario externo es revisado minuciosamente. Si alguien intenta enviar información con formato sospechoso, fotos con extensiones falsificadas o textos maliciosos diseñados para saturar el servidor, las "barricadas" de seguridad del sistema detienen la amenaza en la puerta de entrada, protegiendo la plataforma y la privacidad de los usuarios.
 
 ### Barricada global: ValidationPipe
 
@@ -287,6 +295,8 @@ if (!['jpeg', 'png', 'webp'].includes(metadata.format || ''))
 ---
 
 ## Semana 5 — Manejo de Errores y Excepciones
+
+> **En términos sencillos**: En cualquier sistema digital pueden ocurrir imprevistos, como una falla temporal de conexión o un dato que no se encuentra. El principio fundamental aquí es que la aplicación nunca debe "romperse" ni quedarse congelada, ni mostrarle al usuario pantallas confusas con datos técnicos internos del servidor (lo cual además sería un riesgo de seguridad). En su lugar, el sistema intercepta el problema calmadamente, guarda un registro privado para que los ingenieros lo investiguen, y le entrega al usuario una explicación clara, educada y útil.
 
 ### Filtro global de excepciones *(aplicado en este análisis)*
 
@@ -386,6 +396,8 @@ El comentario explica por qué el silencio es seguro: la historia durable (DB) a
 
 ## Semana 6 — Concurrencia
 
+> **En términos sencillos**: Imagina una cafetería donde entran cientos de personas al mismo tiempo. Si el cajero tuviera que atender a un cliente, preparar su café y esperar a que se lo tome antes de mirar al siguiente, se formaría un embotellamiento interminable. La concurrencia permite que el servidor atienda a miles de usuarios a la vez (enviando mensajes de chat en vivo, viendo el catálogo o dando 'me gusta') de forma paralela y sin demoras, garantizando que los mensajes no se mezclen, no se dupliquen y lleguen de inmediato a quien corresponde.
+
 ### Programación asíncrona (async/await)
 
 Todo el código de I/O es asíncrono. Modelo de concurrencia: **event loop + promises** de Node.js.
@@ -470,6 +482,8 @@ if (client.data.presenceRevision !== revision) return { ok: false };
 ---
 
 ## Semana 7 — Tolerancia a Fallas y Resiliencia
+
+> **En términos sencillos**: Es el equivalente a los airbags, paracaídas y sistemas de frenos de emergencia de un vehículo. Si una parte secundaria de la plataforma llega a fallar (por ejemplo, si el motor de Inteligencia Artificial que recomienda amigos tarda mucho en responder o el servidor de presencia en vivo se desconecta), la plataforma no colapsa ni muestra pantallas de error. En su lugar, activa automáticamente un "plan B": usa cálculos locales de reserva y mantiene el chat, el catálogo y las funciones principales activas y estables para el usuario.
 
 ### Timeout como circuit breaker (ML Service)
 
@@ -566,6 +580,8 @@ El guard `if (!realtimeHealth.available)` previene que una dependencia caída ge
 ---
 
 ## Pruebas Automatizadas — Evidencia de Resultados
+
+> **En términos sencillos**: Son simulaciones controladas donde un conjunto de robots de software prueba decenas de situaciones reales de manera automática en cuestión de segundos: qué ocurre si alguien ingresa mal su clave, si dos personas chatean al mismo tiempo o si se envían datos incompletos. Esto genera evidencia objetiva de que el software funciona tal como fue diseñado y garantiza que futuras actualizaciones no rompan funcionalidades existentes.
 
 ### Suite del Backend (Node.js `node:test`)
 
@@ -678,6 +694,8 @@ tests/test_recommendations.py::test_response_includes_model_version        PASSE
 
 ## Dependencias Transitivas — Análisis de Riesgos
 
+> **En términos sencillos**: Cuando usamos una herramienta de software externa, esa herramienta a su vez depende de otras librerías creadas por terceros (lo que se conoce como dependencias "en cadena" o indirectas). Este análisis es una auditoría completa de esa cadena invisible para garantizar que ninguna pieza oculta contenga fallas de seguridad conocidas, código riesgoso o licencias legales incompatibles con el proyecto.
+
 ### API (NestJS / Node.js)
 
 | Dependencia directa | Transitiva clave | Riesgo | Mitigación |
@@ -713,8 +731,7 @@ con uso comercial sin restricciones de copyleft.
   - Decisiones de diseño justificadas (monorepo, Redis opcional, ML separado, validación en capas)
   - Análisis completo de dependencias transitivas y riesgos
 
-- **Guías de features**: `docs/realtime.md`, `docs/marketplace.md`, `docs/images.md`
-- **Guía de configuración de equipo**: `docs/team-setup.md`
+- **Guía de configuración de equipo**: [`docs/team-setup.md`](docs/team-setup.md)
 
 ---
 
