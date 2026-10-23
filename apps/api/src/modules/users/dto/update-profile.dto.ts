@@ -19,4 +19,17 @@ export class UpdateProfileDto {
     { message: 'La foto debe tener una URL HTTP o HTTPS valida' })
   @MaxLength(500)
   avatar?: string | null;
+
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() || null : value)
+  @IsOptional()
+  @IsUrl({ protocols: ['https', 'http'], require_protocol: true, require_tld: false },
+    { message: 'La foto de portada debe tener una URL HTTP o HTTPS valida' })
+  @MaxLength(500)
+  coverImage?: string | null;
+
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() || null : value)
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  bio?: string | null;
 }

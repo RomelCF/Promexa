@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/postgres/prisma.service';
 
 export interface Comment {
   id: string;
+  authorId?: string;
   author: string;
   authorAvatar: string;
   isVerified: boolean;
@@ -55,19 +56,39 @@ export class PostsService {
     return `Hace ${days} día${days > 1 ? 's' : ''}`;
   }
 
+  private mapComment(c: {
+    id: string;
+    authorId?: string | null;
+    author: string;
+    authorAvatar: string | null;
+    isVerified: boolean;
+    text: string;
+    createdAt: Date;
+  }): Comment {
+    return {
+      id: c.id,
+      authorId: c.authorId || undefined,
+      author: c.author,
+      authorAvatar: c.authorAvatar || '',
+      isVerified: c.isVerified,
+      text: c.text,
+      time: this.formatTime(c.createdAt),
+    };
+  }
+
   async findAll(category?: string): Promise<Post[]> {
-    const where = category && category !== 'ml-graph' && category !== 'all'
-      ? { category }
-      : {};
+    const where =
+      category && category !== 'ml-graph' && category !== 'all'
+        ? { category }
+        : {};
 
     const posts = await this.prisma.post.findMany({
       where,
       include: {
         author: true,
+        comments: { orderBy: { createdAt: 'asc' } },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     });
 
     return posts.map((post) => ({
@@ -96,7 +117,7 @@ export class PostsService {
       likes: post.likes,
       liked: post.liked,
       bookmarked: post.bookmarked,
-      comments: [],
+      comments: post.comments.map((c) => this.mapComment(c)),
       createdAt: post.createdAt,
     }));
   }
@@ -114,9 +135,7 @@ export class PostsService {
       where: { id: data.authorId },
     });
 
-    if (!author) {
-      throw new Error('Author not found');
-    }
+    if (!author) throw new NotFoundException('Author not found');
 
     const newPost = await this.prisma.post.create({
       data: {
@@ -138,9 +157,7 @@ export class PostsService {
           ? 'https://lh3.googleusercontent.com/aida-public/AB6AXuBg21NIl8VdFPryF6IWY-blXSc13SLNb4Sl7Q9l8EWc2PLSRgFGRh0sujb6aUCKCUYPDPiOiITsYoFh-jk5Kn13VWgSeKG-xa-eUIQ_KOQZoBC4B7-zyLcvi6Jcv1PM5I-q2XaynJA_RoFH4LNb9KCKa6L4xSiHeqtQjEh4MM_aAXm1I2VFbn6GKlfDYzJOQjAwai280GrID5emqvvty-Skt8vBumoZrOc2D6TQrlo'
           : null,
       },
-      include: {
-        author: true,
-      },
+      include: { author: true, comments: true },
     });
 
     return {
@@ -175,11 +192,8 @@ export class PostsService {
   }
 
   async toggleLike(postId: string): Promise<{ liked: boolean; likes: number }> {
-    const post = await this.prisma.post.findUnique({
-      where: { id: postId },
-    });
-
-    if (!post) throw new Error('Post not found');
+    const post = await this.prisma.post.findUnique({ where: { id: postId } });
+    if (!post) throw new NotFoundException('Post not found');
 
     const newLiked = !post.liked;
     const updated = await this.prisma.post.update({
@@ -194,17 +208,12 @@ export class PostsService {
   }
 
   async toggleBookmark(postId: string): Promise<{ bookmarked: boolean }> {
-    const post = await this.prisma.post.findUnique({
-      where: { id: postId },
-    });
-
-    if (!post) throw new Error('Post not found');
+    const post = await this.prisma.post.findUnique({ where: { id: postId } });
+    if (!post) throw new NotFoundException('Post not found');
 
     const updated = await this.prisma.post.update({
       where: { id: postId },
-      data: {
-        bookmarked: !post.bookmarked,
-      },
+      data: { bookmarked: !post.bookmarked },
     });
 
     return { bookmarked: updated.bookmarked };
@@ -212,26 +221,19 @@ export class PostsService {
 
   async addComment(
     postId: string,
+    authorId: string,
     author: string,
     authorAvatar: string,
     isVerified: boolean,
-    text: string
+    text: string,
   ): Promise<Comment> {
-    const post = await this.prisma.post.findUnique({
-      where: { id: postId },
+    const post = await this.prisma.post.findUnique({ where: { id: postId } });
+    if (!post) throw new NotFoundException('Post not found');
+
+    const comment = await this.prisma.comment.create({
+      data: { postId, authorId, author, authorAvatar, isVerified, text },
     });
 
-    if (!post) throw new Error('Post not found');
-
-    const newComment: Comment = {
-      id: `c-${Date.now()}`,
-      author,
-      authorAvatar,
-      isVerified,
-      text,
-      time: 'Hace un momento',
-    };
-
-    return newComment;
+    return this.mapComment(comment);
   }
 }

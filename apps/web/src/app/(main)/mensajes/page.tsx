@@ -35,8 +35,37 @@ function MensajesContent() {
   const typingTimer = useRef<ReturnType<typeof setTimeout>>();
   const endRef = useRef<HTMLDivElement>(null);
   const handledTarget = useRef('');
-  const append = (message: ChatMessage) => setMessages(previous =>
-    previous.some(item => item.id === message.id) ? previous : [...previous, message].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)));
+  const selectedIdRef = useRef(selectedId);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  const append = (message: ChatMessage) => {
+    const isCurrentChat = selectedIdRef.current === message.senderId;
+    const msgWithRead: ChatMessage = {
+      ...message,
+      read: message.read ?? (isCurrentChat || message.senderId === user?.id),
+    };
+    if (isCurrentChat && token && message.recipientId === user?.id) {
+      window.dispatchEvent(new CustomEvent('promexa:chat-read'));
+      fetch(`/api/chat/read/${message.senderId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).then(() => {
+        window.dispatchEvent(new CustomEvent('promexa:chat-read'));
+      }).catch(() => {});
+    }
+    setMessages(previous => {
+      const exists = previous.some(item => item.id === message.id);
+      if (exists) {
+        return previous.map(item => item.id === message.id ? msgWithRead : item);
+      }
+      return [...previous, msgWithRead].sort(
+        (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
+      );
+    });
+  };
+
   const { connected, sendMessage, sendTyping } = useChatSocket({ token, onMessage: append,
     onTyping: (id, typing) => {
       setTypingId(typing ? id : '');
@@ -45,6 +74,26 @@ function MensajesContent() {
     },
   });
   const presence = usePresence([...friends.map(friend => friend.id), user?.id], productContext?.id);
+
+  // Mark messages as read when opening a conversation
+  useEffect(() => {
+    if (!selectedId || !token || !user?.id) return;
+    setMessages(prev =>
+      prev.map(m =>
+        m.senderId === selectedId && m.recipientId === user.id && !m.read
+          ? { ...m, read: true }
+          : m
+      )
+    );
+    window.dispatchEvent(new CustomEvent('promexa:chat-read'));
+    fetch(`/api/chat/read/${selectedId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(() => {
+      window.dispatchEvent(new CustomEvent('promexa:chat-read'));
+    }).catch(() => {});
+  }, [selectedId, token, user?.id]);
+
   useEffect(() => {
     if (!token) return;
     let active = true;
@@ -57,8 +106,18 @@ function MensajesContent() {
         const history: ChatMessage[] = await res.json();
         if (active) setSyncError('');
         if (active) setMessages(previous => {
-          const merged = new Map(history.map(message => [message.id, message]));
-          previous.forEach(message => merged.set(message.id, message));
+          const merged = new Map(history.map(message => {
+            const isCurrentChat = selectedIdRef.current === message.senderId;
+            return [
+              message.id,
+              isCurrentChat && message.recipientId === user?.id
+                ? { ...message, read: true }
+                : message,
+            ];
+          }));
+          previous.forEach(message => {
+            if (!merged.has(message.id)) merged.set(message.id, message);
+          });
           return Array.from(merged.values()).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
         });
       } catch {
@@ -68,7 +127,7 @@ function MensajesContent() {
     loadHistory();
     const interval = setInterval(loadHistory, 10000);
     return () => { active = false; clearInterval(interval); };
-  }, [token, connected]);
+  }, [token, connected, user?.id]);
   useEffect(() => {
     if (!token) return;
     let active = true;
@@ -148,12 +207,71 @@ function MensajesContent() {
         <input aria-label="Buscar contacto" placeholder="Buscar contacto..." value={search} onChange={e => setSearch(e.target.value)} className="border rounded-lg p-2 w-full mb-3" />
         {loading && <p>Cargando conversaciones...</p>}
         {!loading && !friends.length && <p className="text-gray-500">Aun no tienes conversaciones. Contacta a un amigo o a un vendedor del marketplace.</p>}
-        {friends.filter(friend => friend.name.toLowerCase().includes(search.toLowerCase())).map(friend => {
-          const last = messages.filter(m => m.senderId === friend.id || m.recipientId === friend.id).at(-1);
-          return <button key={friend.id} disabled={sending} onClick={() => setSelectedId(friend.id)} className={`w-full flex items-center gap-3 text-left p-3 rounded-lg ${selectedId === friend.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
-            <div className="relative shrink-0"><Avatar friend={friend} /><PresenceDot online={presence[friend.id]} className="absolute bottom-0 right-0 w-3 h-3 ring-2 ring-white" /></div><span className="min-w-0"><span className="block font-medium truncate">{friend.name}</span><span className="block text-sm text-gray-500 truncate">{last?.text || 'Iniciar conversacion'}</span></span>
-          </button>;
-        })}
+        {friends
+          .filter(friend => friend.name.toLowerCase().includes(search.toLowerCase()))
+          .sort((a, b) => {
+            const lastA = messages.filter(m => m.senderId === a.id || m.recipientId === a.id).at(-1);
+            const lastB = messages.filter(m => m.senderId === b.id || m.recipientId === b.id).at(-1);
+            if (!lastA && !lastB) return 0;
+            if (!lastA) return 1;
+            if (!lastB) return -1;
+            return lastB.createdAt.localeCompare(lastA.createdAt);
+          })
+          .map(friend => {
+            const friendMessages = messages.filter(m => m.senderId === friend.id || m.recipientId === friend.id);
+            const last = friendMessages.at(-1);
+            const isMe = last?.senderId === user?.id;
+            const unreadCount = messages.filter(
+              m => m.senderId === friend.id && m.recipientId === user?.id && !m.read
+            ).length;
+
+            const previewText = last
+              ? (isMe ? `Tú: ${last.text}` : last.text)
+              : 'Iniciar conversación';
+
+            return (
+              <button
+                key={friend.id}
+                disabled={sending}
+                onClick={() => setSelectedId(friend.id)}
+                className={`w-full flex items-center gap-3 text-left p-3 rounded-xl transition-all ${
+                  selectedId === friend.id
+                    ? 'bg-blue-50/90 border border-blue-200'
+                    : 'hover:bg-gray-50 border border-transparent'
+                }`}
+              >
+                <div className="relative shrink-0">
+                  <Avatar friend={friend} />
+                  <PresenceDot online={presence[friend.id]} className="absolute bottom-0 right-0 w-3 h-3 ring-2 ring-white" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <span className={`block truncate ${unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>
+                      {friend.name}
+                    </span>
+                    {last && (
+                      <span className={`text-[10px] shrink-0 ${unreadCount > 0 ? 'text-blue-600 font-bold' : 'text-gray-400'}`}>
+                        {new Date(last.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`block text-xs truncate flex-1 ${unreadCount > 0 ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                      {previewText}
+                    </span>
+                    {unreadCount > 0 && (
+                      <span
+                        title={`${unreadCount} mensaje${unreadCount > 1 ? 's' : ''} no leído${unreadCount > 1 ? 's' : ''}`}
+                        className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center shadow-xs"
+                      >
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
       </aside>
       <section className={`${selected ? 'flex' : 'hidden md:flex'} flex-col flex-1 min-w-0`}>
         {selected ? <>

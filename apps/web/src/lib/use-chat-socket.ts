@@ -5,7 +5,7 @@ import { useAuth } from './auth-context';
 export interface ChatMessage {
   productId?: string | null; productName?: string | null; productImage?: string | null;
   clientMessageId?: string | null;
-  id: string; senderId: string; recipientId: string; text: string; createdAt: string;
+  id: string; senderId: string; recipientId: string; text: string; read?: boolean; createdAt: string;
 }
 type Listener = { onMessage: (message: ChatMessage) => void; onTyping: (senderId: string, typing: boolean) => void };
 type Presence = Record<string, boolean | null>;

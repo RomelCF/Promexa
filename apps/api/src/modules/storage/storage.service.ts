@@ -18,12 +18,12 @@ export class StorageService {
     });
   }
   private validateKey(purpose: string, userId: string, file: string) {
-    if (!['avatar', 'post'].includes(purpose) || !/^[a-zA-Z0-9_-]{1,100}$/.test(userId)
+    if (!['avatar', 'post', 'cover'].includes(purpose) || !/^[a-zA-Z0-9_-]{1,100}$/.test(userId)
       || !/^[a-f0-9-]{36}\.webp$/.test(file)) throw new NotFoundException();
     return `${purpose}/${userId}/${file}`;
   }
   async upload(purpose: string, userId: string, file?: { buffer: Buffer; size: number }) {
-    if (!['avatar', 'post'].includes(purpose)) throw new BadRequestException('Destino de imagen invalido');
+    if (!['avatar', 'post', 'cover'].includes(purpose)) throw new BadRequestException('Destino de imagen invalido');
     if (!file?.buffer?.length) throw new BadRequestException('Selecciona una imagen');
     const max = (purpose === 'avatar' ? 5 : 10) * 1024 * 1024;
     if (file.size > max) throw new BadRequestException(`La imagen supera ${purpose === 'avatar' ? 5 : 10} MB`);
@@ -33,9 +33,9 @@ export class StorageService {
       const metadata = await image.metadata();
       if (!['jpeg', 'png', 'webp'].includes(metadata.format || '') || (metadata.pages || 1) > 1) throw new Error('Unsupported image');
       buffer = await image.rotate().resize({ width: purpose === 'avatar' ? 512 : 1920,
-        height: purpose === 'avatar' ? 512 : 1920, fit: 'inside', withoutEnlargement: true }).webp({ quality: 85 }).toBuffer();
+        height: purpose === 'avatar' ? 512 : (purpose === 'cover' ? 1080 : 1920), fit: 'inside', withoutEnlargement: true }).webp({ quality: 85 }).toBuffer();
     } catch {
-      throw new BadRequestException('Imagen invalida. Usa JPG, PNG o WebP sin animacion');
+      throw new BadRequestException('Imagen invalida. Usa JPG, JFIF, PNG o WebP sin animacion');
     }
     const key = this.validateKey(purpose, userId, `${randomUUID()}.webp`);
     try {

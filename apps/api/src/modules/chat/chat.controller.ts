@@ -1,4 +1,4 @@
-import { Controller, Get, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ChatService } from './chat.service';
 
@@ -14,4 +14,10 @@ export class ChatController {
   history(@Request() req) {
     return this.chat.history(req.user.userId);
   }
+
+  @Post('read/:senderId')
+  markAsRead(@Request() req, @Param('senderId') senderId: string) {
+    return this.chat.markAsRead(req.user.userId, senderId);
+  }
 }
+

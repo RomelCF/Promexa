@@ -59,4 +59,15 @@ export class ChatService {
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
   }
+
+  async markAsRead(userId: string, senderId: string) {
+    return this.prisma.message.updateMany({
+      where: {
+        recipientId: userId,
+        senderId: senderId,
+        read: false,
+      },
+      data: { read: true },
+    });
+  }
 }

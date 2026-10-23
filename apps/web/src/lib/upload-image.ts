@@ -1,4 +1,4 @@
-export async function uploadImage(file: File, purpose: 'avatar' | 'post', token: string | null): Promise<string> {
+export async function uploadImage(file: File, purpose: 'avatar' | 'post' | 'cover', token: string | null): Promise<string> {
   if (!token) throw new Error('Inicia sesion para subir imagenes');
   const body = new FormData();
   body.append('file', file);

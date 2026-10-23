@@ -9,6 +9,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PostsService } from './posts.service';
@@ -61,18 +62,22 @@ export class PostsController {
     @Param('id') id: string,
     @Body()
     body: {
-      author: string;
-      authorAvatar: string;
-      isVerified: boolean;
+      author?: string;
+      authorAvatar?: string;
+      isVerified?: boolean;
       text: string;
     }
   ) {
+    if (!body?.text?.trim()) {
+      throw new BadRequestException('El comentario no puede estar vacío');
+    }
     return this.postsService.addComment(
       id,
+      req.user.userId,
       req.user.name,
       req.user.avatar,
       req.user.isVerified,
-      body.text
+      body.text.trim()
     );
   }
 }

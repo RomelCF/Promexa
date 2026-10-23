@@ -1,8 +1,10 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisIoAdapter } from './websockets/redis-io.adapter';
 import { AppModule } from './app.module';
+import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -30,7 +32,10 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
-  // Global validation pipe
+  // Global exception filter — Semana 5: registro estructurado y manejo centralizado de errores
+  app.useGlobalFilters(new GlobalHttpExceptionFilter());
+
+  // Global validation pipe — Semana 4: programación defensiva, validación de entradas
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

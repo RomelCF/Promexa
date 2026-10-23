@@ -32,6 +32,8 @@ model User {
   profileType  ProfileType @default(personal)
   isVerified   Boolean     @default(true)
   avatar       String?     @db.VarChar(500)
+  coverImage   String?     @db.VarChar(500)
+  bio          String?     @db.Text
   role         Role        @default(USER)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
@@ -43,6 +45,8 @@ model User {
   receivedFriendRequests Friendship[] @relation("ReceivedFriendships")
   posts                  Post[]       @relation("UserPosts")
   products               Product[]    @relation("UserProducts")
+  notificationsReceived  Notification[] @relation("UserNotifications")
+  notificationsTriggered Notification[] @relation("ActorNotifications")
 
   @@index([name])
   @@index([email])
@@ -88,10 +92,45 @@ model Post {
   updatedAt    DateTime @updatedAt
 
   author       User     @relation("UserPosts", fields: [authorId], references: [id], onDelete: Cascade)
+  comments     Comment[]
 
   @@index([authorId])
   @@index([category])
   @@map("posts")
+}
+
+model Comment {
+  id           String   @id @default(uuid())
+  postId       String
+  authorId     String?
+  author       String   @db.VarChar(100)
+  authorAvatar String?  @db.VarChar(500)
+  isVerified   Boolean  @default(false)
+  text         String   @db.Text
+  createdAt    DateTime @default(now())
+
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([authorId])
+  @@map("comments")
+}
+
+model Notification {
+  id           String   @id @default(uuid())
+  userId       String
+  actorId      String
+  type         String   @db.VarChar(50)
+  message      String   @db.Text
+  read         Boolean  @default(false)
+  friendshipId String?
+  createdAt    DateTime @default(now())
+
+  user         User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  actor        User     @relation("ActorNotifications", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notifications")
 }
 
 model Product {
@@ -128,6 +167,7 @@ model Message {
   productId String?
   productName String? @db.VarChar(200)
   productImage String? @db.VarChar(500)
+  read Boolean @default(false)
   createdAt DateTime @default(now())
   sender User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   recipient User @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)

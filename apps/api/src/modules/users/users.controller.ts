@@ -34,9 +34,38 @@ export class UsersController {
     return this.usersService.getFriends(req.user.userId);
   }
 
+  @Get('recommended')
+  getRecommendedFriends(@Request() req) {
+    return this.usersService.getRecommendedFriends(req.user.userId);
+  }
+
   @Get('search')
   async search(@Query('q') query: string, @Request() req) {
     return this.usersService.searchUsers(query || '', req.user.userId);
+  }
+
+  @Get(':id/profile')
+  @UseGuards(JwtAuthGuard)
+  async getUserProfile(@Param('id') targetId: string, @Request() req) {
+    return this.usersService.getUserFullProfile(targetId, req.user.userId);
+  }
+
+  @Get(':id/relationship')
+  @UseGuards(JwtAuthGuard)
+  async getRelationshipStatus(@Param('id') targetId: string, @Request() req) {
+    return this.usersService.getRelationshipStatus(req.user.userId, targetId);
+  }
+
+  @Get('notifications')
+  @UseGuards(JwtAuthGuard)
+  async getNotifications(@Request() req) {
+    return this.usersService.getNotifications(req.user.userId);
+  }
+
+  @Post('notifications/:id/dismiss')
+  @UseGuards(JwtAuthGuard)
+  async dismissNotification(@Param('id') id: string, @Request() req) {
+    return this.usersService.dismissNotification(id, req.user.userId);
   }
 
   @Post(':id/friend-request')

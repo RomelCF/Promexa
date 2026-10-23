@@ -11,6 +11,8 @@ export interface UserProfile {
   profileType: 'personal' | 'business';
   isVerified: boolean;
   avatar: string | null;
+  coverImage?: string | null;
+  bio?: string | null;
   role: Role;
 }
 
@@ -25,7 +27,13 @@ interface AuthContextType {
     pass: string,
     profileType: 'personal' | 'business'
   ) => Promise<{ success: boolean; error?: string }>;
-  updateProfile: (data: { name: string; email: string; avatar: string | null }) => Promise<void>;
+  updateProfile: (data: {
+    name: string;
+    email: string;
+    avatar: string | null;
+    coverImage?: string | null;
+    bio?: string | null;
+  }) => Promise<void>;
   logout: () => void;
 }
 

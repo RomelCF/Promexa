@@ -23,6 +23,7 @@ export interface UserProfileModalData {
 
 export interface Comment {
   id: string;
+  authorId?: string;
   author: string;
   authorAvatar: string;
   isVerified: boolean;
@@ -102,7 +103,58 @@ export default function HomePage() {
   const [selectedProfile, setSelectedProfile] = useState<UserProfileModalData | null>(null);
   const presence = usePresence([user?.id, ...posts.map(post => post.authorId), selectedProfile?.id, ...SUGGESTED_CONTACTS.map(contact => contact.id)]);
 
-  // Amigos persistidos
+  // Estado de relación de amistad para el perfil seleccionado
+  const [profileRelationship, setProfileRelationship] = useState<{
+    status: 'SELF' | 'FRIENDS' | 'SENT' | 'RECEIVED' | 'NONE' | 'LOADING';
+    friendshipId?: string;
+  }>({ status: 'NONE' });
+  const [friendActionLoading, setFriendActionLoading] = useState(false);
+
+  // Consultar estado de relación en backend cuando se abre el modal de perfil
+  React.useEffect(() => {
+    if (!selectedProfile) {
+      setProfileRelationship({ status: 'NONE' });
+      return;
+    }
+
+    if (!selectedProfile.id || selectedProfile.id === user?.id) {
+      setProfileRelationship({ status: 'SELF' });
+      return;
+    }
+
+    let isMounted = true;
+    setProfileRelationship({ status: 'LOADING' });
+
+    const checkRelationship = async () => {
+      try {
+        const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('promexa_auth_token') : null);
+        const res = await fetch(`/api/users/${selectedProfile.id}/relationship`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setProfileRelationship({
+              status: data.status || 'NONE',
+              friendshipId: data.friendshipId,
+            });
+          }
+        } else {
+          if (isMounted) setProfileRelationship({ status: 'NONE' });
+        }
+      } catch {
+        if (isMounted) setProfileRelationship({ status: 'NONE' });
+      }
+    };
+
+    checkRelationship();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProfile, user?.id, token]);
+
+  // Amigos reales cargados desde el backend
+  const [friendsCount, setFriendsCount] = useState<number>(0);
   const [friendsMap, setFriendsMap] = useState<{ [name: string]: boolean }>({});
 
   // Comments input by post ID
@@ -110,6 +162,9 @@ export default function HomePage() {
 
   // Followed suggestions state
   const [followedUsers, setFollowedUsers] = useState<{ [userId: string]: boolean }>({});
+
+  // Mensajes no leídos
+  const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -131,14 +186,73 @@ export default function HomePage() {
     }
   };
 
-  // Carga inicial persistente de amigos
-  React.useEffect(() => {
+  const fetchFriends = React.useCallback(async () => {
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('promexa_auth_token') : null);
+    if (!authToken) return;
+
     try {
-      localStorage.removeItem(STORAGE_KEY_POSTS);
-      localStorage.removeItem(STORAGE_KEY_FRIENDS);
-      setFriendsMap({});
-    } catch {}
-  }, []);
+      const res = await fetch('/api/users/friends', {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setFriendsCount(data.length);
+          const map: Record<string, boolean> = {};
+          data.forEach((f: any) => {
+            if (f.name) map[f.name] = true;
+          });
+          setFriendsMap(map);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching friends:', err);
+    }
+  }, [token]);
+
+  // Carga y sondeo periódico de amigos
+  React.useEffect(() => {
+    if (user) {
+      fetchFriends();
+      const interval = setInterval(fetchFriends, 4000);
+      const onFriendshipUpdated = () => fetchFriends();
+      window.addEventListener('promexa:friendship-updated', onFriendshipUpdated);
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('promexa:friendship-updated', onFriendshipUpdated);
+      };
+    }
+  }, [user, fetchFriends]);
+
+  // Carga periódica de mensajes no leídos para el sidebar
+  React.useEffect(() => {
+    if (!user || !token) {
+      setUnreadChatCount(0);
+      return;
+    }
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch('/api/chat/messages', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const msgs = await res.json();
+          if (Array.isArray(msgs)) {
+            setUnreadChatCount(msgs.filter((m: any) => m.recipientId === user.id && !m.read).length);
+          }
+        }
+      } catch {}
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 4000);
+    const onRead = () => fetchUnread();
+    window.addEventListener('promexa:chat-read', onRead);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('promexa:chat-read', onRead);
+    };
+  }, [user, token]);
 
   // Carga inicial de publicaciones desde el backend
   React.useEffect(() => {
@@ -232,37 +346,76 @@ export default function HomePage() {
     } finally { setPublishing(false); }
   };
 
-  // Toggle Like con persistencia
-  const handleToggleLike = (postId: string) => {
-    const updated = posts.map((p) => {
-      if (p.id === postId) {
-        const newLiked = !p.liked;
-        return {
-          ...p,
-          liked: newLiked,
-          likes: newLiked ? p.likes + 1 : Math.max(0, p.likes - 1),
-        };
+  // Toggle Like con persistencia en backend
+  const handleToggleLike = async (postId: string) => {
+    // Actualización optimista en UI
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id === postId) {
+          const newLiked = !p.liked;
+          return {
+            ...p,
+            liked: newLiked,
+            likes: newLiked ? p.likes + 1 : Math.max(0, p.likes - 1),
+          };
+        }
+        return p;
+      })
+    );
+
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const res = await fetch(`${backendUrl}/posts/${postId}/like`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId ? { ...p, liked: data.liked, likes: data.likes } : p
+          )
+        );
       }
-      return p;
-    });
-    persistPosts(updated);
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
   };
 
-  // Toggle Bookmark con persistencia
-  const handleToggleBookmark = (postId: string) => {
-    const updated = posts.map((p) => {
-      if (p.id === postId) {
-        const newBookmarked = !p.bookmarked;
-        showToast(
-          newBookmarked
-            ? 'Publicación guardada en tus favoritos'
-            : 'Publicación removida de tus favoritos'
+  // Toggle Bookmark con persistencia en backend
+  const handleToggleBookmark = async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id === postId) {
+          const newBookmarked = !p.bookmarked;
+          showToast(
+            newBookmarked
+              ? 'Publicación guardada en tus favoritos'
+              : 'Publicación removida de tus favoritos'
+          );
+          return { ...p, bookmarked: newBookmarked };
+        }
+        return p;
+      })
+    );
+
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const res = await fetch(`${backendUrl}/posts/${postId}/bookmark`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId ? { ...p, bookmarked: data.bookmarked } : p
+          )
         );
-        return { ...p, bookmarked: newBookmarked };
       }
-      return p;
-    });
-    persistPosts(updated);
+    } catch (error) {
+      console.error('Error toggling bookmark:', error);
+    }
   };
 
   // Compartir enlace
@@ -274,12 +427,15 @@ export default function HomePage() {
     }
   };
 
-  // Agregar comentario en un post con persistencia
-  const handleAddComment = (postId: string) => {
+  // Agregar comentario en un post con persistencia en backend
+  const handleAddComment = async (postId: string) => {
     const text = (commentInputs[postId] || '').trim();
     if (!text) return;
 
-    const newComment: Comment = {
+    setCommentInputs((prev) => ({ ...prev, [postId]: '' }));
+
+    // Comentario temporal optimista
+    const tempComment: Comment = {
       id: `c-${Date.now()}`,
       author: user?.name || 'Usuario',
       authorAvatar: user?.avatar || '',
@@ -288,19 +444,46 @@ export default function HomePage() {
       time: 'Hace un momento',
     };
 
-    const updated = posts.map((p) => {
-      if (p.id === postId) {
-        return {
-          ...p,
-          comments: [...p.comments, newComment],
-        };
-      }
-      return p;
-    });
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId ? { ...p, comments: [...p.comments, tempComment] } : p
+      )
+    );
 
-    persistPosts(updated);
-    setCommentInputs((prev) => ({ ...prev, [postId]: '' }));
-    showToast('Comentario publicado');
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const res = await fetch(`${backendUrl}/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (res.ok) {
+        const savedComment: Comment = await res.json();
+        setPosts((prev) =>
+          prev.map((p) => {
+            if (p.id === postId) {
+              return {
+                ...p,
+                comments: p.comments.map((c) =>
+                  c.id === tempComment.id ? savedComment : c
+                ),
+              };
+            }
+            return p;
+          })
+        );
+        showToast('Comentario publicado');
+      } else {
+        showToast('No se pudo guardar el comentario');
+      }
+    } catch (error) {
+      console.error('Error posting comment:', error);
+      showToast('Error de conexión al comentar');
+    }
   };
 
   // Toggle follow
@@ -312,19 +495,64 @@ export default function HomePage() {
     });
   };
 
-  // Toggle Amigos
-  const handleToggleFriend = (name: string) => {
-    setFriendsMap((prev) => {
-      const isFriend = !prev[name];
-      const updated = { ...prev, [name]: isFriend };
-      try {
-        localStorage.setItem(STORAGE_KEY_FRIENDS, JSON.stringify(updated));
-      } catch (e) {
-        console.error('Error saving friends:', e);
+  // Enviar o gestionar solicitud de amistad
+  const handleSendFriendRequest = async (targetId?: string, targetName?: string) => {
+    const id = targetId || selectedProfile?.id;
+    const name = targetName || selectedProfile?.name || 'este usuario';
+    if (!id || friendActionLoading) return;
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('promexa_auth_token') : null);
+    if (!authToken) {
+      showToast('Debes iniciar sesión para agregar amigos');
+      return;
+    }
+
+    setFriendActionLoading(true);
+    try {
+      if (selectedProfile && selectedProfile.id === id && profileRelationship.status === 'RECEIVED' && profileRelationship.friendshipId) {
+        // Aceptar solicitud pendiente directamente desde el perfil
+        const res = await fetch(`/api/users/friend-requests/${profileRelationship.friendshipId}/accept`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (res.ok) {
+          setProfileRelationship({ status: 'FRIENDS', friendshipId: profileRelationship.friendshipId });
+          setFriendsMap((prev) => ({ ...prev, [name]: true }));
+          showToast(`¡Ahora tú y ${name} son amigos!`);
+          fetchFriends();
+        } else {
+          showToast('No se pudo aceptar la solicitud');
+        }
+      } else {
+        // Enviar solicitud de amistad al usuario
+        const res = await fetch(`/api/users/${id}/friend-request`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (selectedProfile && selectedProfile.id === id) {
+            setProfileRelationship({ status: 'SENT', friendshipId: data.friendship?.id });
+          }
+          setFriendsMap((prev) => ({ ...prev, [name]: true }));
+          showToast(`¡Solicitud de amistad enviada a ${name}!`);
+        } else {
+          showToast(data.message || 'No se pudo enviar la solicitud');
+          if (data.status === 'FRIENDS') {
+            if (selectedProfile && selectedProfile.id === id) setProfileRelationship({ status: 'FRIENDS' });
+            setFriendsMap((prev) => ({ ...prev, [name]: true }));
+            fetchFriends();
+          }
+          if (data.status === 'REQUEST_SENT' || data.status === 'PENDING') {
+            if (selectedProfile && selectedProfile.id === id) setProfileRelationship({ status: 'SENT' });
+          }
+        }
       }
-      showToast(isFriend ? `¡Has agregado a ${name} a tus amigos!` : `Eliminaste a ${name} de tus amigos`);
-      return updated;
-    });
+    } catch (err) {
+      console.error('Error handling friend action:', err);
+      showToast('Error de conexión al procesar la solicitud');
+    } finally {
+      setFriendActionLoading(false);
+    }
   };
 
   // Iniciar conversación directa con un usuario o negocio
@@ -408,7 +636,7 @@ export default function HomePage() {
               </div>
               <div className="flex flex-col border-x border-surface-container/60">
                 <span className="font-headline-sm text-headline-sm text-primary font-bold">
-                  {Object.values(friendsMap).filter(Boolean).length}
+                  {friendsCount}
                 </span>
                 <span className="font-label-sm text-label-sm text-on-surface-variant">Amigos</span>
               </div>
@@ -425,7 +653,7 @@ export default function HomePage() {
           <nav className="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col gap-0.5">
             <Link
               className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-surface-container text-primary font-body-md-medium text-body-md-medium"
-              href="/"
+              href="/perfil"
             >
               <div className="flex items-center gap-2.5">
                 <span
@@ -467,6 +695,11 @@ export default function HomePage() {
                 <span className="material-symbols-outlined text-outline text-[20px]">chat</span>
                 <span>Mensajes Directos</span>
               </div>
+              {unreadChatCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-600 text-white shadow-xs">
+                  {unreadChatCount > 99 ? '99+' : unreadChatCount}
+                </span>
+              )}
             </Link>
 
             <button
@@ -887,6 +1120,7 @@ export default function HomePage() {
                       src={comment.authorAvatar}
                       onClick={() =>
                         setSelectedProfile({
+                          id: comment.authorId,
                           name: comment.author,
                           avatar: comment.authorAvatar,
                           isVerified: comment.isVerified,
@@ -903,6 +1137,7 @@ export default function HomePage() {
                             className="font-body-md-medium text-body-md-medium text-on-surface font-semibold hover:text-primary cursor-pointer transition-colors"
                             onClick={() =>
                               setSelectedProfile({
+                                id: comment.authorId,
                                 name: comment.author,
                                 avatar: comment.authorAvatar,
                                 isVerified: comment.isVerified,
@@ -1044,7 +1279,7 @@ export default function HomePage() {
                             : 'bg-primary-container hover:bg-primary text-on-primary'
                         }`}
                         type="button"
-                        onClick={() => handleToggleFriend(contact.name)}
+                        onClick={() => handleSendFriendRequest(contact.id, contact.name)}
                         title={friendsMap[contact.name] ? 'En tus amigos (Click para cambiar)' : `Agregar a ${contact.name}`}
                       >
                         <span className="material-symbols-outlined text-[15px]">
@@ -1223,22 +1458,62 @@ export default function HomePage() {
                   <span>Conversar ahora</span>
                 </button>
 
-                {/* Botón Agregar a amigos */}
-                <button
-                  className={`py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 transition-all shadow-xs ${
-                    friendsMap[selectedProfile.name]
-                      ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#86EFAC] hover:bg-[#bbf7d0]'
-                      : 'bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/40'
-                  }`}
-                  type="button"
-                  onClick={() => handleToggleFriend(selectedProfile.name)}
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    {friendsMap[selectedProfile.name] ? 'how_to_reg' : 'person_add'}
-                  </span>
-                  <span>{friendsMap[selectedProfile.name] ? 'Amigos' : 'Agregar amigo'}</span>
-                </button>
+                {/* Botón de amistad con estados reales de solicitud */}
+                {profileRelationship.status !== 'SELF' && (
+                  <button
+                    className={`py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                      profileRelationship.status === 'FRIENDS'
+                        ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#86EFAC]'
+                        : profileRelationship.status === 'SENT'
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200 cursor-default'
+                        : profileRelationship.status === 'RECEIVED'
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                        : 'bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/40 active:scale-98'
+                    }`}
+                    type="button"
+                    disabled={
+                      friendActionLoading ||
+                      profileRelationship.status === 'FRIENDS' ||
+                      profileRelationship.status === 'SENT' ||
+                      profileRelationship.status === 'LOADING'
+                    }
+                    onClick={() => handleSendFriendRequest()}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      {profileRelationship.status === 'FRIENDS'
+                        ? 'how_to_reg'
+                        : profileRelationship.status === 'SENT'
+                        ? 'schedule'
+                        : profileRelationship.status === 'RECEIVED'
+                        ? 'person_check'
+                        : 'person_add'}
+                    </span>
+                    <span>
+                      {friendActionLoading
+                        ? 'Enviando...'
+                        : profileRelationship.status === 'LOADING'
+                        ? 'Verificando...'
+                        : profileRelationship.status === 'FRIENDS'
+                        ? 'Amigos'
+                        : profileRelationship.status === 'SENT'
+                        ? 'Solicitud enviada'
+                        : profileRelationship.status === 'RECEIVED'
+                        ? 'Aceptar solicitud'
+                        : 'Agregar amigo'}
+                    </span>
+                  </button>
+                )}
               </div>
+
+              {selectedProfile.id && (
+                <Link
+                  href={`/perfil/${selectedProfile.id}`}
+                  className="mt-3 w-full py-2.5 px-4 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold text-xs flex items-center justify-center gap-2 border border-outline-variant/60 shadow-2xs transition-all text-center"
+                >
+                  <span className="material-symbols-outlined text-[18px]">account_box</span>
+                  <span>Ver perfil completo (fotos, publicaciones, amigos)</span>
+                </Link>
+              )}
 
               <p className="text-[11px] text-center text-outline mt-3">
                 Conecta y chatea en tiempo real con este usuario en Promexa.

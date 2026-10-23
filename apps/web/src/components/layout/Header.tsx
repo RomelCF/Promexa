@@ -18,10 +18,13 @@ interface SearchUser {
 }
 
 export default function Header() {
-  const { connected } = useChatConnection();
+  const { connected, subscribe } = useChatConnection();
   const pathname = usePathname();
   const { user, token, logout } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // Unread chat messages count
+  const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -84,12 +87,78 @@ export default function Header() {
   useEffect(() => {
     if (user) {
       fetchFriendRequests();
-      const interval = setInterval(fetchFriendRequests, 10000);
+      const interval = setInterval(fetchFriendRequests, 4000);
       return () => clearInterval(interval);
     } else {
       setFriendRequests([]);
     }
   }, [user, token]);
+
+  const fetchUnreadMessages = React.useCallback(async () => {
+    if (!user) {
+      setUnreadChatCount(0);
+      return;
+    }
+    const authToken = getValidAuthToken();
+    if (!authToken) return;
+
+    try {
+      const res = await fetch('/api/chat/messages', {
+        headers: { Authorization: `Bearer ${authToken}` },
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const msgs = await res.json();
+        if (Array.isArray(msgs)) {
+          const count = msgs.filter((m: any) => m.recipientId === user.id && !m.read).length;
+          setUnreadChatCount(count);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [user, token]);
+
+  useEffect(() => {
+    if (!user) {
+      setUnreadChatCount(0);
+      return;
+    }
+    fetchUnreadMessages();
+    const interval = setInterval(fetchUnreadMessages, 4000);
+
+    const onChatRead = () => fetchUnreadMessages();
+    window.addEventListener('promexa:chat-read', onChatRead);
+
+    const unsubscribe = subscribe({
+      onMessage: (msg) => {
+        if (msg.recipientId === user.id) {
+          fetchUnreadMessages();
+        }
+      },
+      onTyping: () => {},
+    });
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('promexa:chat-read', onChatRead);
+      unsubscribe();
+    };
+  }, [user, fetchUnreadMessages, subscribe]);
+
+  const handleDismissNotification = async (notifId: string) => {
+    const authToken = getValidAuthToken();
+    setFriendRequests((prev) => prev.filter((req) => req.id !== notifId));
+    if (!authToken) return;
+    try {
+      await fetch(`/api/users/notifications/${notifId}/dismiss`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+    } catch (e) {
+      console.error('Error dismissing notification:', e);
+    }
+  };
 
   const handleAcceptFriendRequest = async (requestId: string, requesterId?: string) => {
     const authToken = getValidAuthToken();
@@ -106,11 +175,14 @@ export default function Header() {
       });
 
       if (res.ok) {
-        setFriendRequests((prev) => prev.filter((req) => req.id !== requestId));
+        setFriendRequests((prev) => prev.filter((req) => req.id !== requestId && req.friendshipId !== requestId));
         if (requesterId) {
           setSearchResults((prev) =>
             prev.map((u) => (u.id === requesterId ? { ...u, relationshipStatus: 'FRIENDS' } : u))
           );
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('promexa:friendship-updated'));
         }
       }
     } catch (err) {
@@ -135,7 +207,7 @@ export default function Header() {
       });
 
       if (res.ok) {
-        setFriendRequests((prev) => prev.filter((req) => req.id !== requestId));
+        setFriendRequests((prev) => prev.filter((req) => req.id !== requestId && req.friendshipId !== requestId));
       }
     } catch (err) {
       console.error('Error rejecting friend request:', err);
@@ -299,7 +371,11 @@ export default function Header() {
                       key={person.id}
                       className="p-3 flex items-center justify-between hover:bg-gray-50/80 transition-colors gap-3"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <Link
+                        href={`/perfil/${person.id}`}
+                        onClick={() => setShowSearchDropdown(false)}
+                        className="flex items-center gap-3 min-w-0 flex-1 hover:opacity-85 transition-opacity"
+                      >
                         <img
                           src={person.avatar}
                           alt={person.name}
@@ -333,7 +409,7 @@ export default function Header() {
                             </span>
                           </div>
                         </div>
-                      </div>
+                      </Link>
 
                       {/* Botón de Amistad / Conectar */}
                       <div className="flex items-center gap-2 shrink-0">
@@ -427,25 +503,50 @@ export default function Header() {
           >
             <span>Mensajes</span>
             <span title={connected ? 'Conectado' : 'Sin conexion'} className={`h-2 w-2 rounded-full inline-block ${connected ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+            {unreadChatCount > 0 && (
+              <span
+                className={`ml-1 px-1.5 min-w-[18px] h-[18px] rounded-full text-[10px] font-extrabold flex items-center justify-center shadow-xs animate-in zoom-in-75 duration-150 ${
+                  isCurrent('/mensajes')
+                    ? 'bg-white text-primary-container'
+                    : 'bg-blue-600 text-white'
+                }`}
+              >
+                {unreadChatCount > 99 ? '99+' : unreadChatCount}
+              </span>
+            )}
+          </Link>
+
+          <Link
+            href="/amigos"
+            className={`px-3 py-2 rounded-lg font-body-md text-body-md transition-colors flex items-center gap-1.5 ${
+              isCurrent('/amigos')
+                ? 'bg-primary-container text-on-primary font-body-md-medium'
+                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">group</span>
+            <span>Amigos</span>
           </Link>
 
           {/* Notification Menu */}
           <div ref={notifContainerRef} className="relative">
             <button
               type="button"
+              aria-label="Notificaciones"
+              title="Notificaciones"
               onClick={() => {
                 setShowNotificationsMenu(!showNotificationsMenu);
                 fetchFriendRequests();
               }}
-              className={`relative px-3 py-2 rounded-lg font-body-md text-body-md transition-colors flex items-center gap-1.5 ${
+              className={`relative p-2 rounded-lg font-body-md text-body-md transition-colors flex items-center justify-center ${
                 showNotificationsMenu
                   ? 'bg-primary-container text-on-primary'
                   : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
               }`}
             >
-              <span>Notificaciones</span>
+              <span className="material-symbols-outlined text-[22px]">notifications</span>
               {friendRequests.length > 0 && (
-                <span className="px-1.5 py-0.2 bg-[#DC2626] text-white font-label-sm text-label-sm rounded-full text-[11px] leading-tight font-bold shadow-sm animate-pulse">
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-[#DC2626] text-white font-label-sm text-label-sm rounded-full text-[11px] leading-tight font-bold shadow-sm animate-pulse min-w-[18px] text-center">
                   {friendRequests.length}
                 </span>
               )}
@@ -483,14 +584,24 @@ export default function Header() {
                     friendRequests.map((req) => (
                       <div key={req.id} className="p-3.5 hover:bg-gray-50/70 transition-colors">
                         <div className="flex items-start gap-3">
-                          <img
-                            src={req.requester?.avatar || 'https://lh3.googleusercontent.com/aida-public/AB6AXuAH3UDaH5S4ho_6H4oKGGbzvRDc6LorHWo-1pfiUJf12W1Auj4lfoQJv49kAmTodxRQ2qjn9Gw3OCKEgNjPAaYs7bWaSTa1ib_zIwwkI7_Q-YO8vrIQcqc93EcFCKTlM8e8icVlD5kHDDY2RToEXmganGu3acS1w16yAXHMOQI9YlC8xg_qHtttlbMKoseK0hFBvd51mYVAjPwV2omGzRF7l9YtdZHuawkgmcCUf4Q'}
-                            alt={req.requester?.name || 'Usuario'}
-                            className="w-10 h-10 rounded-full object-cover border border-gray-200 shrink-0 mt-0.5"
-                          />
+                          <Link
+                            href={`/perfil/${req.actorId || req.requester?.id}`}
+                            onClick={() => setShowNotificationsMenu(false)}
+                            className="shrink-0 group"
+                          >
+                            <img
+                              src={req.requester?.avatar || 'https://lh3.googleusercontent.com/aida-public/AB6AXuAH3UDaH5S4ho_6H4oKGGbzvRDc6LorHWo-1pfiUJf12W1Auj4lfoQJv49kAmTodxRQ2qjn9Gw3OCKEgNjPAaYs7bWaSTa1ib_zIwwkI7_Q-YO8vrIQcqc93EcFCKTlM8e8icVlD5kHDDY2RToEXmganGu3acS1w16yAXHMOQI9YlC8xg_qHtttlbMKoseK0hFBvd51mYVAjPwV2omGzRF7l9YtdZHuawkgmcCUf4Q'}
+                              alt={req.requester?.name || 'Usuario'}
+                              className="w-10 h-10 rounded-full object-cover border border-gray-200 group-hover:ring-2 group-hover:ring-primary-container transition-all"
+                            />
+                          </Link>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-semibold text-sm text-gray-900 truncate">
+                            <Link
+                              href={`/perfil/${req.actorId || req.requester?.id}`}
+                              onClick={() => setShowNotificationsMenu(false)}
+                              className="flex items-center gap-1.5 hover:underline group"
+                            >
+                              <span className="font-semibold text-sm text-gray-900 truncate group-hover:text-primary-container">
                                 {req.requester?.name || 'Usuario Promexa'}
                               </span>
                               {req.requester?.isVerified && (
@@ -498,34 +609,77 @@ export default function Header() {
                                   verified
                                 </span>
                               )}
-                            </div>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              Te ha enviado una solicitud de amistad
-                            </p>
-                            <span className="text-[10px] text-gray-400">
-                              {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
+                            </Link>
 
-                            {/* Acciones */}
-                            <div className="flex items-center gap-2 mt-2.5">
-                              <button
-                                type="button"
-                                disabled={notifActionLoadingId === req.id}
-                                onClick={() => handleAcceptFriendRequest(req.id, req.requester?.id)}
-                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg shadow-sm transition-all flex items-center gap-1 disabled:opacity-50"
-                              >
-                                <span className="material-symbols-outlined text-[14px]">check</span>
-                                {notifActionLoadingId === req.id ? 'Aceptando...' : 'Aceptar'}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={notifActionLoadingId === req.id}
-                                onClick={() => handleRejectFriendRequest(req.id)}
-                                className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-all disabled:opacity-50"
-                              >
-                                Rechazar
-                              </button>
-                            </div>
+                            {req.type === 'FRIEND_ACCEPTED' ? (
+                              <>
+                                <p className="text-xs text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[15px] text-emerald-600">how_to_reg</span>
+                                  Ha aceptado tu solicitud de amistad. ¡Ahora son amigos!
+                                </p>
+                                <div className="flex items-center justify-between mt-2">
+                                  <span className="text-[10px] text-gray-400">
+                                    {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDismissNotification(req.id)}
+                                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg transition-colors border border-emerald-200"
+                                  >
+                                    Entendido
+                                  </button>
+                                </div>
+                              </>
+                            ) : req.type === 'FRIEND_REJECTED' ? (
+                              <>
+                                <p className="text-xs text-gray-600 mt-0.5 flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[15px] text-gray-400">person_remove</span>
+                                  Ha rechazado tu solicitud de amistad.
+                                </p>
+                                <div className="flex items-center justify-between mt-2">
+                                  <span className="text-[10px] text-gray-400">
+                                    {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDismissNotification(req.id)}
+                                    className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors"
+                                  >
+                                    Entendido
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  Te ha enviado una solicitud de amistad
+                                </p>
+                                <span className="text-[10px] text-gray-400">
+                                  {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+
+                                {/* Acciones */}
+                                <div className="flex items-center gap-2 mt-2.5">
+                                  <button
+                                    type="button"
+                                    disabled={notifActionLoadingId === req.id || notifActionLoadingId === req.friendshipId}
+                                    onClick={() => handleAcceptFriendRequest(req.friendshipId || req.id, req.requester?.id)}
+                                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg shadow-sm transition-all flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    <span className="material-symbols-outlined text-[14px]">check</span>
+                                    {notifActionLoadingId === req.id || notifActionLoadingId === req.friendshipId ? 'Aceptando...' : 'Aceptar'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={notifActionLoadingId === req.id || notifActionLoadingId === req.friendshipId}
+                                    onClick={() => handleRejectFriendRequest(req.friendshipId || req.id)}
+                                    className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-all disabled:opacity-50"
+                                  >
+                                    Rechazar
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -592,6 +746,13 @@ export default function Header() {
                       {user.profileType === 'business' ? 'Negocio Local' : 'Usuario Personal'}
                     </span>
                   </div>
+
+                  <button type="button"
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-on-surface hover:bg-surface-container text-left font-medium"
+                    onClick={() => { setShowProfileMenu(false); router.push('/perfil'); }}>
+                    <span className="material-symbols-outlined text-[18px] text-outline">account_circle</span>
+                    <span>Mi perfil</span>
+                  </button>
 
                   <button type="button"
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 text-on-surface hover:bg-surface-container text-left"
