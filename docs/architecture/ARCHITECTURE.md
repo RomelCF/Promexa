@@ -235,13 +235,13 @@ Capa 4: Reglas de negocio en Services (bcrypt limit, CQS, etc.)
 
 | Dependencia | Licencia | Compatible con uso comercial |
 |---|---|---|
-| NestJS, Express, Prisma | MIT | ✅ Sí |
-| Socket.IO, Redis adapter | MIT | ✅ Sí |
-| sharp | Apache 2.0 | ✅ Sí |
-| bcryptjs | MIT | ✅ Sí |
-| FastAPI, Starlette | MIT | ✅ Sí |
-| scikit-learn, numpy | BSD-3-Clause | ✅ Sí |
-| `@aws-sdk/client-s3` | Apache 2.0 | ✅ Sí |
+| NestJS, Express, Prisma | MIT | Sí |
+| Socket.IO, Redis adapter | MIT | Sí |
+| sharp | Apache 2.0 | Sí |
+| bcryptjs | MIT | Sí |
+| FastAPI, Starlette | MIT | Sí |
+| scikit-learn, numpy | BSD-3-Clause | Sí |
+| `@aws-sdk/client-s3` | Apache 2.0 | Sí |
 
 Todas las dependencias directas y transitivas principales son **MIT, Apache 2.0 o BSD**,
 compatibles con uso comercial sin restricciones de copyleft.

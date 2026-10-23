@@ -331,10 +331,10 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 ```
 
 **Principios aplicados**:
-- ✅ Registro estructurado con campos clave-valor
-- ✅ Detalles de errores internos NO expuestos al cliente
-- ✅ Envoltura de excepciones: las no-HTTP se convierten en 500
-- ✅ Antipatrón evitado: ningún `catch {}` vacío en el flujo de manejo
+- Registro estructurado con campos clave-valor
+- Detalles de errores internos NO expuestos al cliente
+- Envoltura de excepciones: las no-HTTP se convierten en 500
+- Antipatrón evitado: ningún `catch {}` vacío en el flujo de manejo
 
 ### Jerarquía de excepciones HTTP
 
@@ -555,13 +555,13 @@ El guard `if (!realtimeHealth.available)` previene que una dependencia caída ge
 
 | Semana | Tema | Estado | Archivos principales |
 |:---:|---|:---:|---|
-| 1 | Construcción, Reúso y Dependencias | ✅ Presente | `package.json`, `app.module.ts` |
-| 2 | Problemas de Tiempo de Ejecución en OO | ✅ Presente | `chat.gateway.ts`, `main.ts`, todos los módulos |
-| 3 | Desarrollo por Contratos | ✅ Presente | `*.dto.ts`, `users.controller.ts`, `prisma.service.ts` |
-| 4 | Programación Defensiva | ✅ Presente | `main.ts`, `storage.service.ts`, `chat.gateway.ts` |
-| 5 | Manejo de Errores y Excepciones | ✅ Presente + mejorado | `http-exception.filter.ts` *(nuevo)*, `users.service.ts` |
-| 6 | Concurrencia | ✅ Presente | `chat.gateway.ts`, `chat.service.ts`, `users.service.ts` |
-| 7 | Tolerancia a Fallas y Resiliencia | ✅ Presente | `users.service.ts` (ML), `redis-io.adapter.ts` |
+| 1 | Construcción, Reúso y Dependencias | Presente | `package.json`, `app.module.ts` |
+| 2 | Problemas de Tiempo de Ejecución en OO | Presente | `chat.gateway.ts`, `main.ts`, todos los módulos |
+| 3 | Desarrollo por Contratos | Presente | `*.dto.ts`, `users.controller.ts`, `prisma.service.ts` |
+| 4 | Programación Defensiva | Presente | `main.ts`, `storage.service.ts`, `chat.gateway.ts` |
+| 5 | Manejo de Errores y Excepciones | Presente + mejorado | `http-exception.filter.ts` *(nuevo)*, `users.service.ts` |
+| 6 | Concurrencia | Presente | `chat.gateway.ts`, `chat.service.ts`, `users.service.ts` |
+| 7 | Tolerancia a Fallas y Resiliencia | Presente | `users.service.ts` (ML), `redis-io.adapter.ts` |
 
 ---
 
@@ -571,7 +571,7 @@ El guard `if (!realtimeHealth.available)` previene que una dependencia caída ge
 
 **Comando**: `node --test test/*.test.cjs`  
 **Archivos**: 8 suites · 36 casos de prueba  
-**Resultado**: ✅ **36 passed · 0 failed** (duración: ~21.5 s)
+**Resultado**: **36 passed · 0 failed** (duración: ~21.5 s)
 
 ```
 TAP version 13
@@ -639,7 +639,7 @@ ok 36 - HTTP upload requires JWT, accepts multipart images and serves the result
 
 **Comando**: `py -m pytest tests/ -v`  
 **Archivos**: `tests/test_recommendations.py` · 13 casos de prueba  
-**Resultado**: ✅ **13 passed · 0 failed** (duración: 1.10 s)
+**Resultado**: **13 passed · 0 failed** (duración: 1.10 s)
 
 ```
 ============================= test session starts =============================
@@ -664,15 +664,15 @@ tests/test_recommendations.py::test_response_includes_model_version        PASSE
 ```
 
 **Aspectos verificados por las pruebas ML**:
-- ✅ Health check del servicio
-- ✅ Score en rango `[55, 99]` para cualquier candidato
-- ✅ Monotonía de la similitud Jaccard (tags compartidos → mayor score)
-- ✅ Monotonía de la afinidad de grafo (más amigos → mayor score)
-- ✅ Postcondición de `recommendation_reason` con amigos comunes
-- ✅ Invariante de ordenamiento descendente por score
-- ✅ Parámetro `limit` respetado (5 y default 12)
-- ✅ Token interno inválido → HTTP 403
-- ✅ Campo `model_version` presente en respuesta y en cada ítem
+- Health check del servicio
+- Score en rango `[55, 99]` para cualquier candidato
+- Monotonía de la similitud Jaccard (tags compartidos -> mayor score)
+- Monotonía de la afinidad de grafo (más amigos -> mayor score)
+- Postcondición de `recommendation_reason` con amigos comunes
+- Invariante de ordenamiento descendente por score
+- Parámetro `limit` respetado (5 y default 12)
+- Token interno inválido -> HTTP 403
+- Campo `model_version` presente en respuesta y en cada ítem
 
 ---
 
