@@ -4,6 +4,8 @@ import {
   Request,
   Get,
   Post,
+  Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -39,8 +41,47 @@ export class PostsController {
       tags?: string[];
     }
   ) {
-    return this.postsService.create({ ...body, authorId: req.user.userId,
+    const userId = req.user.userId || req.user.id;
+    return this.postsService.create({ ...body, authorId: userId,
       authorAvatar: req.user.avatar, isVerified: req.user.isVerified });
+  }
+
+  @Patch(':id')
+  update(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() body: { content: string }
+  ) {
+    if (!body?.content?.trim()) {
+      throw new BadRequestException('El contenido no puede estar vacío');
+    }
+    const userId = req.user.userId || req.user.id;
+    return this.postsService.update(id, userId, body.content.trim());
+  }
+
+  @Delete(':id')
+  remove(@Request() req, @Param('id') id: string) {
+    const userId = req.user.userId || req.user.id;
+    return this.postsService.remove(id, userId);
+  }
+
+  @Post(':id/report')
+  @HttpCode(HttpStatus.OK)
+  report(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() body: { reason: string; details?: string }
+  ) {
+    if (!body?.reason?.trim()) {
+      throw new BadRequestException('Debes indicar un motivo de denuncia');
+    }
+    const userId = req.user.userId || req.user.id;
+    return this.postsService.report(
+      id,
+      userId,
+      body.reason.trim(),
+      body.details?.trim()
+    );
   }
 
   @Post(':id/like')

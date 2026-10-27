@@ -287,9 +287,14 @@ export default function Header() {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const targetUser = searchResults.find((u) => u.id === targetUserId);
+        const isBusiness = targetUser?.profileType === 'business' || data.isBusiness || data.isFollowing || data.status === 'FRIENDS';
         setSearchResults((prev) =>
           prev.map((u) =>
-            u.id === targetUserId ? { ...u, relationshipStatus: 'REQUEST_SENT' } : u
+            u.id === targetUserId
+              ? { ...u, relationshipStatus: isBusiness ? 'FRIENDS' : 'REQUEST_SENT' }
+              : u
           )
         );
       }
@@ -411,13 +416,13 @@ export default function Header() {
                         </div>
                       </Link>
 
-                      {/* Botón de Amistad / Conectar */}
+                      {/* Botón de Amistad / Seguir */}
                       <div className="flex items-center gap-2 shrink-0">
                         {person.relationshipStatus === 'FRIENDS' ? (
                           <div className="flex items-center gap-1.5">
                             <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-medium text-xs rounded-lg border border-emerald-200 flex items-center gap-1">
                               <span className="material-symbols-outlined text-[14px]">check</span>
-                              Amigos
+                              {person.profileType === 'business' ? 'Siguiendo' : 'Amigos'}
                             </span>
                             <Link
                               href={`/mensajes?userId=${encodeURIComponent(person.id)}`}
@@ -428,7 +433,7 @@ export default function Header() {
                               <span className="material-symbols-outlined text-[18px]">chat</span>
                             </Link>
                           </div>
-                        ) : person.relationshipStatus === 'REQUEST_SENT' ? (
+                        ) : person.relationshipStatus === 'REQUEST_SENT' && person.profileType !== 'business' ? (
                           <span className="px-2.5 py-1 bg-gray-100 text-gray-600 font-medium text-xs rounded-lg flex items-center gap-1">
                             <span className="material-symbols-outlined text-[14px]">schedule</span>
                             Enviada
@@ -455,9 +460,9 @@ export default function Header() {
                             className="px-3 py-1.5 bg-primary-container text-white hover:bg-primary-dark font-medium text-xs rounded-lg shadow-sm transition-all flex items-center gap-1 disabled:opacity-50"
                           >
                             <span className="material-symbols-outlined text-[15px]">
-                              person_add
+                              {person.profileType === 'business' ? 'add' : 'person_add'}
                             </span>
-                            {actionLoadingId === person.id ? 'Enviando...' : 'Agregar'}
+                            {actionLoadingId === person.id ? 'Procesando...' : (person.profileType === 'business' ? 'Seguir' : 'Agregar')}
                           </button>
                         )}
                       </div>
@@ -577,7 +582,7 @@ export default function Header() {
                       </span>
                       <p className="text-sm font-medium text-gray-700">Sin notificaciones pendientes</p>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        Cuando alguien te envíe una solicitud de amistad aparecerá aquí.
+                        Aquí verás solicitudes de amistad, respuestas y actividad de tus amigos y empresas seguidas.
                       </p>
                     </div>
                   ) : (
@@ -647,6 +652,90 @@ export default function Header() {
                                   >
                                     Entendido
                                   </button>
+                                </div>
+                              </>
+                            ) : req.type === 'NEW_POST' ? (
+                              <>
+                                <p className="text-xs text-blue-700 font-medium mt-0.5 flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[15px] text-blue-500">post_add</span>
+                                  {req.message || 'Hizo una nueva publicación'}
+                                </p>
+                                <div className="flex items-center justify-between mt-2">
+                                  <span className="text-[10px] text-gray-400">
+                                    {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <Link
+                                      href="/"
+                                      onClick={() => { setShowNotificationsMenu(false); handleDismissNotification(req.id); }}
+                                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition-colors border border-blue-200"
+                                    >
+                                      Ver publicación
+                                    </Link>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDismissNotification(req.id)}
+                                      className="px-2 py-1 text-gray-400 hover:text-gray-600 text-xs rounded-lg transition-colors"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </div>
+                              </>
+                            ) : req.type === 'NEW_COMMENT' ? (
+                              <>
+                                <p className="text-xs text-violet-700 font-medium mt-0.5 flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[15px] text-violet-500">comment</span>
+                                  {req.message || 'Comentó en una publicación'}
+                                </p>
+                                <div className="flex items-center justify-between mt-2">
+                                  <span className="text-[10px] text-gray-400">
+                                    {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <Link
+                                      href="/"
+                                      onClick={() => { setShowNotificationsMenu(false); handleDismissNotification(req.id); }}
+                                      className="px-2.5 py-1 bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-semibold rounded-lg transition-colors border border-violet-200"
+                                    >
+                                      Ver comentario
+                                    </Link>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDismissNotification(req.id)}
+                                      className="px-2 py-1 text-gray-400 hover:text-gray-600 text-xs rounded-lg transition-colors"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </div>
+                              </>
+                            ) : req.type === 'NEW_PRODUCT' ? (
+                              <>
+                                <p className="text-xs text-orange-700 font-medium mt-0.5 flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[15px] text-orange-500">storefront</span>
+                                  {req.message || 'Publicó un nuevo producto'}
+                                </p>
+                                <div className="flex items-center justify-between mt-2">
+                                  <span className="text-[10px] text-gray-400">
+                                    {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <Link
+                                      href="/marketplace"
+                                      onClick={() => { setShowNotificationsMenu(false); handleDismissNotification(req.id); }}
+                                      className="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-semibold rounded-lg transition-colors border border-orange-200"
+                                    >
+                                      Ver en Marketplace
+                                    </Link>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDismissNotification(req.id)}
+                                      className="px-2 py-1 text-gray-400 hover:text-gray-600 text-xs rounded-lg transition-colors"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
                                 </div>
                               </>
                             ) : (
@@ -771,6 +860,19 @@ export default function Header() {
                     </span>
                     <span>Mis Productos</span>
                   </Link>
+
+                  {user?.role === 'ADMIN' && (
+                    <Link
+                      href="/admin"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-primary hover:bg-surface-container font-body-md text-body-md font-semibold transition-colors"
+                      onClick={() => setShowProfileMenu(false)}
+                    >
+                      <span className="material-symbols-outlined text-[18px] text-primary">
+                        admin_panel_settings
+                      </span>
+                      <span>Panel Administrador</span>
+                    </Link>
+                  )}
 
                   <div className="h-px bg-surface-container my-1" />
 

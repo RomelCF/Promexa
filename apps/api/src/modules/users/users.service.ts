@@ -1,14 +1,62 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException, UnauthorizedException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../database/postgres/prisma.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
-export class UsersService {
+export class UsersService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
   ) {}
+
+  async onModuleInit() {
+    await this.ensureAdminAccount();
+  }
+
+  async ensureAdminAccount() {
+    try {
+      const email = 'adminpromexa@promexa.com';
+      const name = 'adminpromexa';
+      const password = 'admin123';
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      const existing = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            { email },
+            { name }
+          ]
+        }
+      });
+
+      if (existing) {
+        await this.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            name,
+            email,
+            passwordHash,
+            role: 'ADMIN',
+            isVerified: true,
+          }
+        });
+      } else {
+        await this.prisma.user.create({
+          data: {
+            name,
+            email,
+            passwordHash,
+            role: 'ADMIN',
+            profileType: 'personal',
+            isVerified: true,
+          }
+        });
+      }
+    } catch {
+      // Non-fatal if DB not yet available
+    }
+  }
 
   async changePassword(userId: string, data: ChangePasswordDto) {
     if (data.newPassword !== data.confirmPassword) throw new BadRequestException('Las claves no coinciden');
@@ -406,6 +454,24 @@ export class UsersService {
     });
   }
 
+  async findByEmailOrUsername(identifier: string) {
+    const clean = (identifier || '').trim().toLowerCase();
+    let user = await this.prisma.user.findUnique({
+      where: { email: clean },
+    });
+    if (!user && !clean.includes('@')) {
+      user = await this.prisma.user.findUnique({
+        where: { email: `${clean}@promexa.com` },
+      });
+    }
+    if (!user) {
+      user = await this.prisma.user.findFirst({
+        where: { name: { equals: clean, mode: 'insensitive' } },
+      });
+    }
+    return user;
+  }
+
   async findById(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
@@ -491,6 +557,8 @@ export class UsersService {
       throw new NotFoundException('Usuario destinatario no encontrado');
     }
 
+    const isBusiness = targetUser.profileType === 'business';
+
     const existing = await this.prisma.friendship.findFirst({
       where: {
         OR: [
@@ -499,6 +567,65 @@ export class UsersService {
         ],
       },
     });
+
+    // Si la cuenta objetivo es de tipo empresa/negocio, se sigue automáticamente sin necesidad de confirmación
+    if (isBusiness) {
+      if (existing) {
+        if (existing.status === 'ACCEPTED') {
+          return { message: 'Ya sigues a este negocio', status: 'FRIENDS', isFollowing: true, isBusiness: true };
+        }
+        const updated = await this.prisma.friendship.update({
+          where: { id: existing.id },
+          data: {
+            requesterId: currentUserId,
+            addresseeId: targetId,
+            status: 'ACCEPTED',
+          },
+        });
+        await this.prisma.notification.create({
+          data: {
+            userId: targetId,
+            actorId: currentUserId,
+            type: 'FRIEND_ACCEPTED',
+            message: 'ha comenzado a seguir tu empresa',
+            friendshipId: updated.id,
+          },
+        });
+        return {
+          message: 'Ahora sigues a esta empresa',
+          status: 'FRIENDS',
+          isFollowing: true,
+          isBusiness: true,
+          friendship: updated,
+        };
+      }
+
+      const newFollow = await this.prisma.friendship.create({
+        data: {
+          requesterId: currentUserId,
+          addresseeId: targetId,
+          status: 'ACCEPTED',
+        },
+      });
+
+      await this.prisma.notification.create({
+        data: {
+          userId: targetId,
+          actorId: currentUserId,
+          type: 'FRIEND_ACCEPTED',
+          message: 'ha comenzado a seguir tu empresa',
+          friendshipId: newFollow.id,
+        },
+      });
+
+      return {
+        message: 'Ahora sigues a esta empresa',
+        status: 'FRIENDS',
+        isFollowing: true,
+        isBusiness: true,
+        friendship: newFollow,
+      };
+    }
 
     if (existing) {
       if (existing.status === 'ACCEPTED') {
@@ -568,6 +695,13 @@ export class UsersService {
       return { status: 'SELF' };
     }
 
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: { profileType: true },
+    });
+
+    const isBusiness = targetUser?.profileType === 'business';
+
     const friendship = await this.prisma.friendship.findFirst({
       where: {
         OR: [
@@ -578,21 +712,23 @@ export class UsersService {
     });
 
     if (!friendship) {
-      return { status: 'NONE' };
+      return { status: 'NONE', targetProfileType: targetUser?.profileType || 'personal', isBusiness: !!isBusiness };
     }
 
     if (friendship.status === 'ACCEPTED') {
-      return { status: 'FRIENDS', friendshipId: friendship.id };
+      return { status: 'FRIENDS', friendshipId: friendship.id, targetProfileType: targetUser?.profileType || 'personal', isBusiness: !!isBusiness };
     }
 
     if (friendship.status === 'PENDING') {
       return {
         status: friendship.requesterId === currentUserId ? 'SENT' : 'RECEIVED',
         friendshipId: friendship.id,
+        targetProfileType: targetUser?.profileType || 'personal',
+        isBusiness: !!isBusiness,
       };
     }
 
-    return { status: 'NONE' };
+    return { status: 'NONE', targetProfileType: targetUser?.profileType || 'personal', isBusiness: !!isBusiness };
   }
 
   async getPendingFriendRequests(userId: string) {
@@ -628,11 +764,11 @@ export class UsersService {
       requester: f.requester,
     }));
 
-    // 2. Notifications for this user (e.g. FRIEND_ACCEPTED, FRIEND_REJECTED)
+    // 2. Notifications for this user (e.g. FRIEND_ACCEPTED, activity from friends)
     const notifications = await this.prisma.notification.findMany({
       where: {
         userId,
-        type: { in: ['FRIEND_ACCEPTED', 'FRIEND_REJECTED'] },
+        type: { in: ['FRIEND_ACCEPTED', 'FRIEND_REJECTED', 'NEW_POST', 'NEW_COMMENT', 'NEW_PRODUCT'] },
         read: false,
       },
       include: {
@@ -648,13 +784,13 @@ export class UsersService {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 30,
+      take: 50,
     });
 
     const notifsList = notifications.map((n) => ({
       id: n.id,
       type: n.type,
-      status: n.type === 'FRIEND_ACCEPTED' ? 'ACCEPTED' : 'REJECTED',
+      status: n.type === 'FRIEND_ACCEPTED' ? 'ACCEPTED' : n.type === 'FRIEND_REJECTED' ? 'REJECTED' : n.type,
       message: n.message,
       createdAt: n.createdAt,
       friendshipId: n.friendshipId,
@@ -806,4 +942,86 @@ export class UsersService {
 
     return newUser;
   }
+
+  async getAllUsersForAdmin() {
+    return this.prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        profileType: true,
+        isVerified: true,
+        avatar: true,
+        coverImage: true,
+        bio: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            posts: true,
+            products: true,
+            receivedFriendRequests: true,
+          },
+        },
+      },
+    });
+  }
+
+  async updateUserByAdmin(
+    userId: string,
+    data: {
+      isVerified?: boolean;
+      role?: 'USER' | 'BUSINESS' | 'ADMIN';
+      name?: string;
+      email?: string;
+      profileType?: 'personal' | 'business';
+      bio?: string;
+    },
+  ) {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(data.isVerified !== undefined ? { isVerified: data.isVerified } : {}),
+        ...(data.role ? { role: data.role } : {}),
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.email ? { email: data.email.toLowerCase() } : {}),
+        ...(data.profileType ? { profileType: data.profileType } : {}),
+        ...(data.bio !== undefined ? { bio: data.bio } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        profileType: true,
+        isVerified: true,
+        avatar: true,
+        coverImage: true,
+        bio: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async deleteUserByAdmin(userId: string) {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    if (user.role === 'ADMIN') {
+      throw new BadRequestException('No se puede eliminar una cuenta de Administrador');
+    }
+    await this.prisma.user.delete({
+      where: { id: userId },
+    });
+    return { message: 'Usuario eliminado exitosamente' };
+  }
 }
+

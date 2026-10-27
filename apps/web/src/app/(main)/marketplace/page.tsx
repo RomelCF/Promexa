@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import ImagePicker from '@/components/profile/ImagePicker';
 import { uploadImage } from '@/lib/upload-image';
 import { useAuth } from '@/lib/auth-context';
@@ -46,8 +47,9 @@ const DISTRICTS = [
   'Pueblo Libre',
 ];
 
-export default function MarketplacePage() {
+function MarketplaceContent() {
   const { user, token } = useAuth();
+  const searchParams = useSearchParams();
   const favoritesKey = `promexa_marketplace_favorites_v2:${user?.id || ""}`;
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -62,9 +64,26 @@ export default function MarketplacePage() {
   const [maxPrice, setMaxPrice] = useState<string>('');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [onlyMyProducts, setOnlyMyProducts] = useState(false);
   const [sortBy, setSortBy] = useState<string>('recent');
   const [favoriteIds, setFavoriteIds] = useState<{ [id: string]: boolean }>({});
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+
+  // Cantidad de productos del usuario autenticado
+  const myProductsCount = useMemo(() => {
+    if (!user?.id) return 0;
+    return products.filter((p) => p.sellerId === user.id).length;
+  }, [products, user?.id]);
+
+  // Sincronizar filtros desde la URL (ej: /marketplace?mine=true o /marketplace?favorites=true)
+  useEffect(() => {
+    if (searchParams?.get('mine') === 'true' || searchParams?.get('filter') === 'mis-productos') {
+      setOnlyMyProducts(true);
+    }
+    if (searchParams?.get('favorites') === 'true' || searchParams?.get('filter') === 'favoritos') {
+      setOnlyFavorites(true);
+    }
+  }, [searchParams]);
 
   // Modales
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
@@ -184,6 +203,7 @@ export default function MarketplacePage() {
     setMaxPrice('');
     setVerifiedOnly(false);
     setOnlyFavorites(false);
+    setOnlyMyProducts(false);
     setSortBy('recent');
     showToast('Filtros restablecidos');
   };
@@ -192,6 +212,13 @@ export default function MarketplacePage() {
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
+        // Solo mis productos
+        if (onlyMyProducts) {
+          if (!user || p.sellerId !== user.id) {
+            return false;
+          }
+        }
+
         // Búsqueda por texto (nombre, descripción, tienda o categoría)
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
@@ -248,6 +275,8 @@ export default function MarketplacePage() {
     selectedDistrict,
     verifiedOnly,
     onlyFavorites,
+    onlyMyProducts,
+    user,
     minPrice,
     maxPrice,
     sortBy,
@@ -317,6 +346,43 @@ export default function MarketplacePage() {
 
         {/* Controles de la derecha: Ordenar y Botón Publicar Producto */}
         <div className="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap">
+          {/* Toggle Mis Productos */}
+          <button
+            type="button"
+            className={`h-11 px-3.5 rounded-lg border font-body-md-medium text-body-md-medium flex items-center gap-2 transition-colors cursor-pointer ${
+              onlyMyProducts
+                ? 'bg-primary/10 border-primary text-primary font-semibold'
+                : 'bg-surface-container-low border-transparent text-on-surface-variant hover:bg-surface-container'
+            }`}
+            onClick={() => {
+              if (!user) {
+                showToast('Inicia sesión para ver tus productos');
+                return;
+              }
+              setOnlyMyProducts(!onlyMyProducts);
+            }}
+            title={onlyMyProducts ? 'Mostrar todos los productos' : 'Ver solo mis productos ofrecidos'}
+          >
+            <span
+              className={`material-symbols-outlined text-[18px] ${onlyMyProducts ? 'text-primary' : ''}`}
+              style={{ fontVariationSettings: onlyMyProducts ? "'FILL' 1" : "'FILL' 0" }}
+            >
+              inventory_2
+            </span>
+            <span className="hidden sm:inline">Mis productos</span>
+            {user && myProductsCount > 0 && (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-caption font-caption ${
+                  onlyMyProducts
+                    ? 'bg-primary text-on-primary font-bold'
+                    : 'bg-surface-container text-outline'
+                }`}
+              >
+                {myProductsCount}
+              </span>
+            )}
+          </button>
+
           {/* Toggle Mis Favoritos */}
           <button
             type="button"
@@ -548,6 +614,41 @@ export default function MarketplacePage() {
               />
             </button>
           </div>
+
+          {/* Toggle: Mis productos */}
+          {user && (
+            <div className="bg-surface-container-low p-3 rounded-lg flex items-center justify-between gap-2 border border-surface-container">
+              <div className="flex items-center gap-2">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                  onlyMyProducts ? 'bg-primary text-on-primary' : 'bg-surface-variant text-on-surface-variant'
+                }`}>
+                  <span className="material-symbols-outlined text-[14px]">inventory_2</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-label-md text-label-md text-on-surface font-medium">
+                    Mis productos
+                  </span>
+                  <span className="font-caption text-caption text-outline">
+                    {myProductsCount} {myProductsCount === 1 ? 'publicación' : 'publicaciones'}
+                  </span>
+                </div>
+              </div>
+              <button
+                className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer shrink-0 focus:outline-none ${
+                  onlyMyProducts ? 'bg-primary' : 'bg-surface-variant'
+                }`}
+                type="button"
+                onClick={() => setOnlyMyProducts(!onlyMyProducts)}
+                title={onlyMyProducts ? 'Ver todos los productos' : 'Filtrar solo mis productos'}
+              >
+                <span
+                  className={`absolute top-1 w-4 h-4 rounded-full bg-on-primary transition-all shadow-sm ${
+                    onlyMyProducts ? 'left-6' : 'left-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
         </aside>
 
         {/* CONTENIDO DERECHA: Carrusel + Catálogo */}
@@ -563,7 +664,8 @@ export default function MarketplacePage() {
                 selectedDistrict !== 'Todos los distritos' ||
                 searchQuery ||
                 verifiedOnly ||
-                onlyFavorites) && (
+                onlyFavorites ||
+                onlyMyProducts) && (
                 <span className="text-caption text-outline">
                   (Filtros activos)
                 </span>
@@ -572,12 +674,36 @@ export default function MarketplacePage() {
 
             {/* Pills de filtros aplicados para remover rápido */}
             <div className="flex items-center gap-2 flex-wrap">
+              {onlyMyProducts && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-caption font-caption text-primary font-medium">
+                  Mis productos
+                  <button
+                    onClick={() => setOnlyMyProducts(false)}
+                    className="hover:text-primary-container font-bold ml-1 cursor-pointer"
+                    title="Quitar filtro de mis productos"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              {onlyFavorites && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 text-caption font-caption text-red-600 font-medium">
+                  Favoritos
+                  <button
+                    onClick={() => setOnlyFavorites(false)}
+                    className="hover:text-red-800 font-bold ml-1 cursor-pointer"
+                    title="Quitar filtro de favoritos"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
               {selectedCategory !== 'Todas' && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container text-caption font-caption text-on-surface">
                   {selectedCategory}
                   <button
                     onClick={() => setSelectedCategory('Todas')}
-                    className="hover:text-red-600"
+                    className="hover:text-red-600 font-bold ml-1 cursor-pointer"
                   >
                     ×
                   </button>
@@ -588,7 +714,7 @@ export default function MarketplacePage() {
                   {selectedDistrict}
                   <button
                     onClick={() => setSelectedDistrict('Todos los distritos')}
-                    className="hover:text-red-600"
+                    className="hover:text-red-600 font-bold ml-1 cursor-pointer"
                   >
                     ×
                   </button>
@@ -605,19 +731,36 @@ export default function MarketplacePage() {
               </div>
               <div>
                 <h4 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                  No se encontraron productos
+                  {onlyMyProducts ? 'No tienes productos que coincidan' : 'No se encontraron productos'}
                 </h4>
                 <p className="font-body-md text-body-md text-outline mt-1 max-w-md mx-auto">
-                  Prueba cambiando los términos de búsqueda o limpiando los filtros para ver más productos disponibles.
+                  {onlyMyProducts
+                    ? (myProductsCount === 0
+                        ? 'Aún no has publicado ningún producto en el marketplace. ¡Haz clic en "Publicar producto" para comenzar a vender!'
+                        : 'Tienes productos publicados, pero ninguno coincide con los filtros o búsqueda actuales.')
+                    : 'Prueba cambiando los términos de búsqueda o limpiando los filtros para ver más productos disponibles.'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="px-4 py-2 rounded-lg bg-primary-container text-on-primary font-body-md-medium text-body-md-medium hover:bg-primary transition-colors cursor-pointer"
-              >
-                Restablecer todos los filtros
-              </button>
+              <div className="flex items-center justify-center gap-3">
+                {onlyMyProducts && myProductsCount === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsPublishModalOpen(true)}
+                    className="px-4 py-2 rounded-lg bg-[#F28C28] hover:bg-[#e07b1b] text-on-primary font-body-md-medium text-body-md-medium shadow-sm transition-all font-semibold cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">add</span>
+                    <span>Publicar mi primer producto</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="px-4 py-2 rounded-lg bg-primary-container text-on-primary font-body-md-medium text-body-md-medium hover:bg-primary transition-colors cursor-pointer"
+                  >
+                    Restablecer todos los filtros
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -650,6 +793,13 @@ export default function MarketplacePage() {
                         {product.status}
                       </span>
                     </div>
+
+                    {user?.id && product.sellerId === user.id && (
+                      <div className="absolute top-10 left-3 flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary text-white text-[11px] font-semibold shadow-sm">
+                        <span className="material-symbols-outlined text-[12px]">person</span>
+                        <span>Tu producto</span>
+                      </div>
+                    )}
 
                     {/* Botón de Favorito */}
                     <button
@@ -1063,5 +1213,13 @@ export default function MarketplacePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MarketplacePage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto px-4 py-12 text-center text-outline">Cargando marketplace...</div>}>
+      <MarketplaceContent />
+    </Suspense>
   );
 }

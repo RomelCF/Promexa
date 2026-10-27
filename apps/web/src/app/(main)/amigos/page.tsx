@@ -72,11 +72,13 @@ export default function AmigosPage() {
     location?: string;
     mutualCount?: number;
     tags?: string[];
+    profileType?: string;
   } | null>(null);
 
   const [profileRelationship, setProfileRelationship] = useState<{
     status: 'SELF' | 'FRIENDS' | 'SENT' | 'RECEIVED' | 'NONE' | 'LOADING';
     friendshipId?: string;
+    isBusiness?: boolean;
   }>({ status: 'NONE' });
 
   // Presencia en vivo de amigos y recomendados
@@ -206,6 +208,7 @@ export default function AmigosPage() {
             setProfileRelationship({
               status: data.status || 'NONE',
               friendshipId: data.friendshipId,
+              isBusiness: data.isBusiness || data.targetProfileType === 'business' || selectedProfile?.profileType === 'business',
             });
           }
         } else {
@@ -236,15 +239,29 @@ export default function AmigosPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setRecommended((prev) =>
-          prev.map((r) =>
-            r.id === targetId ? { ...r, relationshipStatus: 'REQUEST_SENT' } : r
-          )
-        );
-        if (selectedProfile && selectedProfile.id === targetId) {
-          setProfileRelationship({ status: 'SENT' });
+        const targetUser = recommended.find((r) => r.id === targetId);
+        const isBusiness = targetUser?.profileType === 'business' || data.isBusiness || data.isFollowing || data.status === 'FRIENDS';
+        if (isBusiness || data.status === 'FRIENDS') {
+          setRecommended((prev) =>
+            prev.map((r) =>
+              r.id === targetId ? { ...r, relationshipStatus: 'REQUEST_SENT' } : r
+            )
+          );
+          if (selectedProfile && selectedProfile.id === targetId) {
+            setProfileRelationship({ status: 'FRIENDS', friendshipId: data.friendship?.id, isBusiness: true });
+          }
+          showToast(`¡Ahora sigues a ${targetName}!`);
+        } else {
+          setRecommended((prev) =>
+            prev.map((r) =>
+              r.id === targetId ? { ...r, relationshipStatus: 'REQUEST_SENT' } : r
+            )
+          );
+          if (selectedProfile && selectedProfile.id === targetId) {
+            setProfileRelationship({ status: 'SENT', friendshipId: data.friendship?.id });
+          }
+          showToast(`¡Solicitud enviada a ${targetName}!`);
         }
-        showToast(`¡Solicitud enviada a ${targetName}!`);
       } else {
         showToast(data.message || 'No se pudo enviar la solicitud');
       }
@@ -624,8 +641,8 @@ export default function AmigosPage() {
                           onClick={() => handleSendFriendRequest(person.id, person.name)}
                           className="flex-1 py-2 px-3 rounded-xl bg-primary-container hover:bg-primary text-on-primary text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-50"
                         >
-                          <span className="material-symbols-outlined text-[15px]">person_add</span>
-                          <span>{isActing ? 'Enviando...' : 'Agregar amigo'}</span>
+                          <span className="material-symbols-outlined text-[15px]">{person.profileType === 'business' ? 'add' : 'person_add'}</span>
+                          <span>{isActing ? 'Procesando...' : (person.profileType === 'business' ? 'Seguir' : 'Agregar amigo')}</span>
                         </button>
                       )}
 
@@ -977,12 +994,12 @@ export default function AmigosPage() {
                         : profileRelationship.status === 'LOADING'
                         ? 'Verificando...'
                         : profileRelationship.status === 'FRIENDS'
-                        ? 'Amigos'
+                        ? (profileRelationship.isBusiness || selectedProfile.profileType === 'business' ? 'Siguiendo' : 'Amigos')
                         : profileRelationship.status === 'SENT'
                         ? 'Solicitud enviada'
                         : profileRelationship.status === 'RECEIVED'
                         ? 'Aceptar solicitud'
-                        : 'Agregar amigo'}
+                        : (profileRelationship.isBusiness || selectedProfile.profileType === 'business' ? 'Seguir' : 'Agregar amigo')}
                     </span>
                   </button>
                 )}
