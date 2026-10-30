@@ -83,9 +83,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.disconnect(true);
       return null;
     }
-    const friends = await this.users.getFriends(user.id);
-    return user.id !== recipientId && (friends.some(friend => friend.id === recipientId)
-      || await this.chat.canContact(user.id, recipientId, productId)) ? user : null;
+    return await this.chat.canContact(user.id, recipientId, productId) ? user : null;
   }
 
   @SubscribeMessage('sendMessage')

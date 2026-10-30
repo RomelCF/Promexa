@@ -4,12 +4,14 @@ import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcryptjs';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly analytics: AnalyticsService,
   ) {}
 
   async validateUser(email: string, pass: string) {
@@ -33,6 +35,7 @@ export class AuthService {
     const payload = { sub: user.id, email: user.email, role: user.role };
 
     const accessToken = await this.jwtService.signAsync(payload);
+    await this.analytics.recordLogin(user);
 
     return {
       message: 'Inicio de sesión exitoso',
@@ -48,6 +51,7 @@ export class AuthService {
     const payload = { sub: user.id, email: user.email, role: user.role };
 
     const accessToken = await this.jwtService.signAsync(payload);
+    await this.analytics.recordLogin(user);
 
     return {
       message: 'Cuenta creada exitosamente',

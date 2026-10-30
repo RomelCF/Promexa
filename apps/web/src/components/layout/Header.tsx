@@ -1,5 +1,6 @@
 'use client';
 
+import RelationshipActions from '@/components/profile/RelationshipActions';
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -408,56 +409,7 @@ export default function Header() {
                         </div>
                       </Link>
 
-                      {/* Botón de Amistad / Seguir */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {person.relationshipStatus === 'FRIENDS' ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-medium text-xs rounded-lg border border-emerald-200 flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[14px]">check</span>
-                              {person.profileType === 'business' ? 'Siguiendo' : 'Amigos'}
-                            </span>
-                            <Link
-                              href={`/mensajes?userId=${encodeURIComponent(person.id)}`}
-                              onClick={() => setShowSearchDropdown(false)}
-                              className="p-1.5 text-gray-500 hover:text-primary-container hover:bg-gray-100 rounded-lg"
-                              title="Enviar mensaje"
-                            >
-                              <span className="material-symbols-outlined text-[18px]">chat</span>
-                            </Link>
-                          </div>
-                        ) : person.relationshipStatus === 'REQUEST_SENT' && person.profileType !== 'business' ? (
-                          <span className="px-2.5 py-1 bg-gray-100 text-gray-600 font-medium text-xs rounded-lg flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[14px]">schedule</span>
-                            Enviada
-                          </span>
-                        ) : person.relationshipStatus === 'REQUEST_RECEIVED' ? (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const matchingReq = friendRequests.find((r) => r.requester?.id === person.id);
-                              if (matchingReq) {
-                                await handleAcceptFriendRequest(matchingReq.id, person.id);
-                              }
-                            }}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs rounded-lg shadow-sm flex items-center gap-1 transition-all"
-                          >
-                            <span className="material-symbols-outlined text-[14px]">check</span>
-                            Aceptar solicitud
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={actionLoadingId === person.id}
-                            onClick={() => handleSendFriendRequest(person.id)}
-                            className="px-3 py-1.5 bg-primary-container text-white hover:bg-primary-dark font-medium text-xs rounded-lg shadow-sm transition-all flex items-center gap-1 disabled:opacity-50"
-                          >
-                            <span className="material-symbols-outlined text-[15px]">
-                              {person.profileType === 'business' ? 'add' : 'person_add'}
-                            </span>
-                            {actionLoadingId === person.id ? 'Procesando...' : (person.profileType === 'business' ? 'Seguir' : 'Agregar')}
-                          </button>
-                        )}
-                      </div>
+                      <RelationshipActions userId={person.id} />
                     </div>
                   ))}
                 </div>
@@ -522,7 +474,7 @@ export default function Header() {
             }`}
           >
             <span className="material-symbols-outlined text-[18px]">group</span>
-            <span>Amigos</span>
+            <span>{user?.profileType === 'business' ? 'Seguidores' : 'Amigos'}</span>
           </Link>
 
           {/* Notification Menu */}
@@ -603,7 +555,12 @@ export default function Header() {
                               </span>
                             </Link>
 
-                            {req.type === 'FRIEND_ACCEPTED' ? (
+                            {req.type === 'NEW_FOLLOWER' ? (
+                              <div className="space-y-2">
+                                <p className="text-xs text-emerald-700">Ha comenzado a seguir tu negocio.</p>
+                                <button type="button" onClick={() => handleDismissNotification(req.id)} className="text-xs text-outline">Descartar</button>
+                              </div>
+                            ) : req.type === 'FRIEND_ACCEPTED' ? (
                               <>
                                 <p className="text-xs text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
                                   <span className="material-symbols-outlined text-[15px] text-emerald-600">how_to_reg</span>

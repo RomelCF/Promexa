@@ -5,7 +5,7 @@ import PresenceDot, { presenceLabel } from '@/components/profile/PresenceDot';
 import { useAuth } from '@/lib/auth-context';
 import { ChatMessage, useChatSocket, usePresence } from '@/lib/use-chat-socket';
 interface ProductInquiry { id: string; name: string; image: string; sellerId: string; store: string; sellerAvatar?: string | null; isVerified: boolean }
-interface Friend { id: string; name: string; avatar: string | null; isVerified: boolean }
+interface Friend { id: string; name: string; avatar: string | null; isVerified: boolean; canMessage?: boolean }
 function Avatar({ friend }: { friend: Friend }) {
   return friend.avatar ? <img src={friend.avatar} alt={friend.name} className="w-10 h-10 rounded-full object-cover" />
     : <span className="material-symbols-outlined w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">person</span>;
@@ -14,13 +14,16 @@ function MensajesContent() {
   const { user, token } = useAuth();
   const params = useSearchParams();
   const [savedContacts, setFriends] = useState<Friend[]>([]);
+  const [targetContact, setTargetContact] = useState<Friend | null>(null);
   const [productContext, setProductContext] = useState<ProductInquiry | null>(null);
   const [draftProduct, setDraftProduct] = useState<ProductInquiry | null>(null);
   const preparedInquiry = useRef('');
-  const friends = productContext && !savedContacts.some(contact => contact.id === productContext.sellerId)
-    ? [...savedContacts, { id: productContext.sellerId, name: productContext.store,
-      avatar: productContext.sellerAvatar || null, isVerified: productContext.isVerified }]
-    : savedContacts;
+  const contactsWithTarget = targetContact && !savedContacts.some(contact => contact.id === targetContact.id)
+    ? [...savedContacts, targetContact] : savedContacts;
+  const friends = productContext && user?.profileType !== 'business' && !contactsWithTarget.some(contact => contact.id === productContext.sellerId)
+    ? [...contactsWithTarget, { id: productContext.sellerId, name: productContext.store,
+      avatar: productContext.sellerAvatar || null, isVerified: productContext.isVerified, canMessage: true }]
+    : contactsWithTarget;
   const [selectedId, setSelectedId] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +39,22 @@ function MensajesContent() {
   const typingTimer = useRef<ReturnType<typeof setTimeout>>();
   const endRef = useRef<HTMLDivElement>(null);
   const handledTarget = useRef('');
+  useEffect(() => {
+    const target = params.get('userId') || params.get('to');
+    setTargetContact(null);
+    if (!token || !target) return;
+    let active = true;
+    fetch(`/api/users/${encodeURIComponent(target)}/profile`, {
+      headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+    }).then(async response => {
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      if (active && data.relationship.canMessage) {
+        setTargetContact({ ...data.user, canMessage: true }); setSelectedId(data.user.id);
+      }
+    }).catch(() => { if (active) setError('No se pudo verificar este contacto.'); });
+    return () => { active = false; };
+  }, [params, token]);
   const selectedIdRef = useRef(selectedId);
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -161,7 +180,7 @@ function MensajesContent() {
     return () => { active = false; };
   }, [params, token, user?.id]);
   useEffect(() => {
-    const target = params.get('userId');
+    const target = params.get('userId') || params.get('to');
     // Compatibility with existing feed links; never fall back to a different person.
     const name = params.get('user') || params.get('name') || params.get('store');
     const key = target || name || '';
@@ -200,7 +219,7 @@ function MensajesContent() {
     (message.senderId === selectedId && message.recipientId === user?.id));
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selected || !connected || !text.trim() || sendingRef.current) return;
+    if (!selected || selected.canMessage === false || !connected || !text.trim() || sendingRef.current) return;
     sendingRef.current = true;
     const recipientId = selected.id;
     setSending(true); setError('');
@@ -311,12 +330,12 @@ function MensajesContent() {
           <form onSubmit={submit} className="border-t p-4 flex items-end gap-2">
             <textarea
               ref={messageInputRef}
-              disabled={sending}
+              disabled={sending || selected.canMessage === false}
               rows={1}
               aria-label="Mensaje"
               maxLength={5000}
               value={text}
-              placeholder="Escribe un mensaje..."
+              placeholder={selected.canMessage === false ? 'Podras responder cuando esta persona te escriba.' : 'Escribe un mensaje...'}
               onChange={e => { setText(e.target.value); sendTyping(selected.id, !!e.target.value.trim()); }}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -326,12 +345,12 @@ function MensajesContent() {
               }}
               className="border rounded-lg px-3 py-2.5 leading-[22px] flex-1 min-w-0 min-h-11 max-h-40 resize-none overflow-y-hidden"
             />
-            <button type="submit" disabled={!connected || sending || !text.trim()} className="bg-blue-700 text-white rounded-lg h-11 w-28 shrink-0 disabled:opacity-50">{sending ? 'Enviando...' : 'Enviar'}</button>
+            <button type="submit" disabled={selected.canMessage === false || !connected || sending || !text.trim()} className="bg-blue-700 text-white rounded-lg h-11 w-28 shrink-0 disabled:opacity-50">{sending ? 'Enviando...' : 'Enviar'}</button>
           </form>
         </> : <p className="m-auto p-8 text-gray-500">{missingTarget ? 'Este contacto no tiene una conversacion contigo. Abre su producto desde el marketplace.' : 'Selecciona un contacto para conversar.'}</p>}
       </section>
     </div>
-    <p className="text-xs text-gray-500 mt-3">El historial se guarda en tu cuenta. Tu amigo puede leer los mensajes cuando vuelva a conectarse.</p>
+    <p className="text-xs text-gray-500 mt-3">{user?.profileType === 'business' ? 'Puedes responder a las personas que ya te escribieron.' : 'El historial se guarda en tu cuenta. Puedes escribir a tus amigos y contactar negocios.'}</p>
   </div>;
 }
 export default function MensajesPage() {

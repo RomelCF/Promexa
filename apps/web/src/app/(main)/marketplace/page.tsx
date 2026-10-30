@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import RelationshipActions from '@/components/profile/RelationshipActions';
 import ImagePicker from '@/components/profile/ImagePicker';
 import { uploadImage } from '@/lib/upload-image';
 import { useAuth } from '@/lib/auth-context';
@@ -63,6 +64,7 @@ function MarketplaceContent() {
   const [minPrice, setMinPrice] = useState<string>('');
   const [maxPrice, setMaxPrice] = useState<string>('');
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [onlyMyProducts, setOnlyMyProducts] = useState(false);
   const [sortBy, setSortBy] = useState<string>('recent');
   const [favoriteIds, setFavoriteIds] = useState<{ [id: string]: boolean }>({});
@@ -203,6 +205,7 @@ function MarketplaceContent() {
     setMinPrice('');
     setMaxPrice('');
     setOnlyFavorites(false);
+    setVerifiedOnly(false);
     setOnlyMyProducts(false);
     setSortBy('recent');
     showToast('Filtros restablecidos');
@@ -212,6 +215,7 @@ function MarketplaceContent() {
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
+        if (verifiedOnly && !p.isVerified) return false;
         // Solo mis productos
         if (onlyMyProducts) {
           if (!user || p.sellerId !== user.id) {
@@ -269,6 +273,7 @@ function MarketplaceContent() {
     selectedCategory,
     selectedDistrict,
     onlyFavorites,
+    verifiedOnly,
     onlyMyProducts,
     user,
     minPrice,
@@ -803,7 +808,7 @@ function MarketplaceContent() {
                       </div>
 
                       {/* Botón de Contacto Rápido */}
-                      <Link
+                      {user?.profileType === 'business' ? (<RelationshipActions userId={product.sellerId || ""} />) : (<Link
                         href={`/mensajes?userId=${encodeURIComponent(product.sellerId || "")}&productId=${encodeURIComponent(product.id)}`}
                         onClick={(e) => e.stopPropagation()}
                         className="text-primary hover:text-on-primary-fixed-variant p-1.5 rounded-lg hover:bg-surface-container transition-colors"
@@ -812,7 +817,7 @@ function MarketplaceContent() {
                         <span className="material-symbols-outlined text-[20px]">
                           chat_bubble_outline
                         </span>
-                      </Link>
+                      </Link>)}
                     </div>
                   </div>
                 </article>
@@ -1083,13 +1088,13 @@ function MarketplaceContent() {
 
                 {/* Botones de acción y coordinación */}
                 <div className="pt-3 space-y-2.5">
-                  <Link
+                  {user?.profileType === 'business' ? (<RelationshipActions userId={selectedProduct.sellerId || ""} />) : (<Link
                     href={`/mensajes?userId=${encodeURIComponent(selectedProduct.sellerId || "")}&productId=${encodeURIComponent(selectedProduct.id)}`}
                     className="w-full h-12 rounded-xl bg-[#F28C28] hover:bg-[#e07b1b] text-on-primary font-body-md-medium text-body-md-medium font-semibold flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
                   >
                     <span className="material-symbols-outlined text-[20px]">chat</span>
                     <span>Coordinar pedido con el vendedor</span>
-                  </Link>
+                  </Link>)}
 
                   {/* Acciones de gestión para el vendedor */}
                   <div className="flex items-center gap-2">

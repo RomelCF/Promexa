@@ -23,6 +23,7 @@ test('create takes the seller from authentication and writes to Prisma', async (
   let written;
   const service = new MarketplaceService({
     user: { findUnique: async () => ({ name: 'Alice', isVerified: false }) },
+    friendship: { findMany: async () => [] },
     product: { create: async query => { written = query.data; return product; } },
   });
   await new MarketplaceController(service).create({ user: { userId: 'alice' } }, {

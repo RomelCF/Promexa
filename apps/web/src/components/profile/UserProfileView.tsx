@@ -1,5 +1,6 @@
 'use client';
 
+import RelationshipActions from '@/components/profile/RelationshipActions';
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -23,15 +24,17 @@ export interface UserProfileData {
     createdAt: string;
   };
   relationship: {
-    status: 'SELF' | 'FRIENDS' | 'SENT' | 'RECEIVED' | 'NONE';
+    status: 'SELF' | 'FRIENDS' | 'FOLLOWING' | 'FOLLOWER' | 'SENT' | 'RECEIVED' | 'NONE';
     friendshipId?: string;
   };
   stats: {
     postsCount: number;
     friendsCount: number;
+    followersCount: number;
     photosCount: number;
     mutualCount: number;
   };
+  followers?: UserProfileData['friends'];
   friends: Array<{
     id: string;
     name: string;
@@ -148,69 +151,6 @@ export default function UserProfileView({ userId }: { userId: string }) {
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
-
-  // Manejar solicitud de amistad
-  const handleFriendAction = async () => {
-    if (!profileData || actionLoading) return;
-    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('promexa_auth_token') : null);
-    if (!authToken) {
-      showToast('Inicia sesión para enviar solicitudes de amistad');
-      return;
-    }
-
-    const { relationship, user } = profileData;
-    setActionLoading(true);
-
-    try {
-      if (relationship.status === 'NONE') {
-        const res = await fetch(`/api/users/${user.id}/friend-request`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${authToken}` },
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok) {
-          const isBusiness = user.profileType === 'business' || data.isBusiness || data.isFollowing || data.status === 'FRIENDS';
-          if (isBusiness || data.status === 'FRIENDS') {
-            showToast(`¡Ahora sigues a ${user.name}!`);
-            setProfileData({
-              ...profileData,
-              relationship: { status: 'FRIENDS', friendshipId: data.friendship?.id },
-              stats: { ...profileData.stats, friendsCount: profileData.stats.friendsCount + 1 },
-            });
-          } else {
-            showToast('¡Solicitud de amistad enviada!');
-            setProfileData({
-              ...profileData,
-              relationship: { status: 'SENT', friendshipId: data.friendship?.id },
-            });
-          }
-          window.dispatchEvent(new CustomEvent('promexa:friendship-updated'));
-        } else {
-          showToast(data.message || 'Error al enviar solicitud');
-        }
-      } else if (relationship.status === 'RECEIVED' && relationship.friendshipId) {
-        const res = await fetch(`/api/users/friend-requests/${relationship.friendshipId}/accept`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${authToken}` },
-        });
-        if (res.ok) {
-          showToast('¡Solicitud aceptada! Ahora son amigos.');
-          setProfileData({
-            ...profileData,
-            relationship: { status: 'FRIENDS' },
-            stats: { ...profileData.stats, friendsCount: profileData.stats.friendsCount + 1 },
-          });
-          window.dispatchEvent(new CustomEvent('promexa:friendship-updated'));
-        } else {
-          showToast('Error al aceptar la solicitud');
-        }
-      }
-    } catch {
-      showToast('Error de red al procesar la solicitud');
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   // Guardar biografía rápida
   const handleSaveBio = async () => {
@@ -391,7 +331,7 @@ export default function UserProfileView({ userId }: { userId: string }) {
   // Iniciar chat
   const handleStartChat = () => {
     if (!profileData) return;
-    router.push(`/mensajes?to=${profileData.user.id}`);
+    router.push(`/mensajes?userId=${profileData.user.id}`);
   };
 
   if (loading) {
@@ -420,7 +360,11 @@ export default function UserProfileView({ userId }: { userId: string }) {
     );
   }
 
-  const { user, relationship, stats, friends, photos, posts } = profileData;
+  const { user, relationship, stats, photos, posts } = profileData;
+  const isBusiness = user.profileType === 'business';
+  const friends = isBusiness ? (profileData.followers || []) : profileData.friends;
+  const connectionsCount = isBusiness ? stats.followersCount : stats.friendsCount;
+  const connectionsLabel = isBusiness ? 'Seguidores' : 'Amigos';
   const isOwnProfile = relationship.status === 'SELF' || user.id === currentUser?.id;
 
   const filteredFriends = friends.filter((f) =>
@@ -560,7 +504,7 @@ export default function UserProfileView({ userId }: { userId: string }) {
                   {/* Amigos en común o contador */}
                   <div className="flex items-center justify-center md:justify-start gap-4 text-xs font-semibold text-on-surface-variant pt-1">
                     <span className="hover:underline cursor-pointer" onClick={() => setActiveTab('friends')}>
-                      {stats.friendsCount} {stats.friendsCount === 1 ? 'amigo' : 'amigos'}
+                      {connectionsCount} {isBusiness ? (connectionsCount === 1 ? 'seguidor' : 'seguidores') : (connectionsCount === 1 ? 'amigo' : 'amigos')}
                     </span>
                     {stats.mutualCount > 0 && !isOwnProfile && (
                       <span>· {stats.mutualCount} en común</span>
@@ -598,80 +542,7 @@ export default function UserProfileView({ userId }: { userId: string }) {
                   </>
                 ) : (
                   <>
-                    {/* Botón de relación de amistad o seguimiento */}
-                    {user.profileType === 'business' ? (
-                      <button
-                        type="button"
-                        disabled={actionLoading || relationship.status === 'FRIENDS'}
-                        onClick={handleFriendAction}
-                        className={`px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all shadow-xs ${
-                          relationship.status === 'FRIENDS'
-                            ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#86EFAC] cursor-default'
-                            : 'bg-primary-container hover:bg-primary text-white shadow-sm active:scale-98'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          {relationship.status === 'FRIENDS' ? 'check' : 'add'}
-                        </span>
-                        <span>
-                          {actionLoading
-                            ? 'Procesando...'
-                            : relationship.status === 'FRIENDS'
-                            ? 'Siguiendo'
-                            : 'Seguir'}
-                        </span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={
-                          actionLoading ||
-                          relationship.status === 'SENT' ||
-                          relationship.status === 'FRIENDS'
-                        }
-                        onClick={handleFriendAction}
-                        className={`px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all shadow-xs ${
-                          relationship.status === 'FRIENDS'
-                            ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#86EFAC]'
-                            : relationship.status === 'SENT'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200 cursor-default'
-                            : relationship.status === 'RECEIVED'
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
-                            : 'bg-primary-container hover:bg-primary text-white shadow-sm active:scale-98'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          {relationship.status === 'FRIENDS'
-                            ? 'how_to_reg'
-                            : relationship.status === 'SENT'
-                            ? 'schedule'
-                            : relationship.status === 'RECEIVED'
-                            ? 'person_check'
-                            : 'person_add'}
-                        </span>
-                        <span>
-                          {actionLoading
-                            ? 'Procesando...'
-                            : relationship.status === 'FRIENDS'
-                            ? 'Amigos'
-                            : relationship.status === 'SENT'
-                            ? 'Solicitud enviada'
-                            : relationship.status === 'RECEIVED'
-                            ? 'Aceptar solicitud'
-                            : 'Agregar a amigos'}
-                        </span>
-                      </button>
-                    )}
-
-                    {/* Botón de Enviar Mensaje */}
-                    <button
-                      type="button"
-                      onClick={handleStartChat}
-                      className="px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold text-sm flex items-center gap-2 border border-outline-variant/60 shadow-xs transition-all active:scale-98"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">chat</span>
-                      <span>Mensaje</span>
-                    </button>
+                    <RelationshipActions userId={user.id} onChanged={fetchProfile} />
                   </>
                 )}
               </div>
@@ -787,9 +658,9 @@ export default function UserProfileView({ userId }: { userId: string }) {
                 }`}
               >
                 <span className="material-symbols-outlined text-[18px]">group</span>
-                <span>Amigos</span>
+                <span>{connectionsLabel}</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-surface-container text-outline">
-                  {stats.friendsCount}
+                  {connectionsCount}
                 </span>
               </button>
 
@@ -933,9 +804,9 @@ export default function UserProfileView({ userId }: { userId: string }) {
               <div className="bg-white border border-outline-variant/50 rounded-2xl p-5 shadow-xs space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-bold text-base text-on-surface">Amigos</h3>
+                    <h3 className="font-bold text-base text-on-surface">{connectionsLabel}</h3>
                     <span className="text-xs text-outline">
-                      {stats.friendsCount} {stats.friendsCount === 1 ? 'amigo' : 'amigos'}
+                      {connectionsCount} {isBusiness ? (connectionsCount === 1 ? 'seguidor' : 'seguidores') : (connectionsCount === 1 ? 'amigo' : 'amigos')}
                     </span>
                   </div>
                   <button
@@ -948,7 +819,7 @@ export default function UserProfileView({ userId }: { userId: string }) {
                 </div>
 
                 {friends.length === 0 ? (
-                  <p className="text-xs text-outline py-4 text-center">Sin amigos agregados todavía.</p>
+                  <p className="text-xs text-outline py-4 text-center">{isBusiness ? 'Todavia no hay seguidores.' : 'Sin amigos agregados todavia.'}</p>
                 ) : (
                   <div className="grid grid-cols-3 gap-3">
                     {friends.slice(0, 6).map((friend) => (
@@ -1168,8 +1039,8 @@ export default function UserProfileView({ userId }: { userId: string }) {
           <div className="bg-white border border-outline-variant/50 rounded-2xl p-6 shadow-xs space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-outline-variant/40">
               <div>
-                <h2 className="text-xl font-bold text-on-surface">Amigos</h2>
-                <p className="text-xs text-outline">{stats.friendsCount} conexiones en Promexa</p>
+                <h2 className="text-xl font-bold text-on-surface">{connectionsLabel}</h2>
+                <p className="text-xs text-outline">{connectionsCount} conexiones en Promexa</p>
               </div>
 
               <div className="w-full sm:w-72 relative">
@@ -1180,7 +1051,7 @@ export default function UserProfileView({ userId }: { userId: string }) {
                   type="text"
                   value={friendSearch}
                   onChange={(e) => setFriendSearch(e.target.value)}
-                  placeholder="Buscar amigos..."
+                  placeholder={isBusiness ? 'Buscar seguidores...' : 'Buscar amigos...'}
                   className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-outline-variant/60 outline-none focus:border-primary-container"
                 />
               </div>
@@ -1189,7 +1060,7 @@ export default function UserProfileView({ userId }: { userId: string }) {
             {filteredFriends.length === 0 ? (
               <div className="text-center py-12 space-y-2">
                 <span className="material-symbols-outlined text-5xl text-outline">group_off</span>
-                <p className="text-sm font-semibold text-on-surface">No se encontraron amigos</p>
+                <p className="text-sm font-semibold text-on-surface">{isBusiness ? 'No se encontraron seguidores' : 'No se encontraron amigos'}</p>
                 <p className="text-xs text-outline">Intenta con otro término de búsqueda.</p>
               </div>
             ) : (
@@ -1220,13 +1091,7 @@ export default function UserProfileView({ userId }: { userId: string }) {
                       </div>
                     </Link>
 
-                    <Link
-                      href={`/mensajes?to=${friend.id}`}
-                      className="p-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface shrink-0"
-                      title="Enviar mensaje"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">chat</span>
-                    </Link>
+                    <RelationshipActions userId={friend.id} />
                   </div>
                 ))}
               </div>

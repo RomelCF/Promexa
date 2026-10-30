@@ -8,7 +8,7 @@ function fixture() {
   const gateway = new ChatGateway({ verifyAsync: async () => ({ sub: 'alice', exp: Date.now() / 1000 + 60 }) }, {
     findById: async () => ({ id: 'alice', name: 'Alice' }),
     getFriends: async () => [{ id: 'bob' }],
-  }, { canContact: async () => false, save: async (senderId, recipientId, text) => ({ id: 'saved-message', senderId, recipientId, text, createdAt: new Date().toISOString() }) });
+  }, { canContact: async (senderId, recipientId) => senderId === 'alice' && recipientId === 'bob', save: async (senderId, recipientId, text) => ({ id: 'saved-message', senderId, recipientId, text, createdAt: new Date().toISOString() }) });
   gateway.server = { to: room => ({ emit: (event, message) => deliveries.push({ room, event, message }) }) };
   const client = { data: { user: { id: 'alice', name: 'Alice', expiresAt: Date.now() + 60000 } },
     handshake: { auth: { token: 'signed' } }, join: async () => {}, emit() {}, disconnect() { this.disconnected = true; },
@@ -100,7 +100,7 @@ test('cannot attach a product belonging to a different seller', async () => {
 
 test('temporary database authorization failures are returned as retryable errors', async () => {
   const { gateway, client, deliveries } = fixture();
-  gateway.users.getFriends = async () => { throw new Error('Database down'); };
+  gateway.chat.canContact = async () => { throw new Error('Database down'); };
   const response = await gateway.send(client, { recipientId: 'bob', text: 'Hello' });
   assert.deepEqual(response, { ok: false, code: 'TEMPORARY' });
   assert.equal(deliveries.length, 0);

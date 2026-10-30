@@ -14,6 +14,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../../common/guards/admin.guard';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -39,6 +40,18 @@ export class UsersController {
   getRecommendedFriends(@Request() req) {
     return this.usersService.getRecommendedFriends(req.user.userId);
   }
+
+  @Get('followers')
+  getFollowers(@Request() req) { return this.usersService.getFollowers(req.user.userId); }
+
+  @Get('following')
+  getFollowing(@Request() req) { return this.usersService.getFollowing(req.user.userId); }
+
+  @Post(':id/follow')
+  follow(@Param('id') id: string, @Request() req) { return this.usersService.followBusiness(req.user.userId, id); }
+
+  @Delete(':id/follow')
+  unfollow(@Param('id') id: string, @Request() req) { return this.usersService.unfollowBusiness(req.user.userId, id); }
 
   @Get('search')
   async search(@Query('q') query: string, @Request() req) {
@@ -96,16 +109,19 @@ export class UsersController {
   }
 
   @Get('admin/all')
+  @UseGuards(AdminGuard)
   async getAllUsersForAdmin() {
     return this.usersService.getAllUsersForAdmin();
   }
 
   @Patch('admin/:id')
+  @UseGuards(AdminGuard)
   async updateUserByAdmin(@Param('id') targetId: string, @Body() body: any) {
     return this.usersService.updateUserByAdmin(targetId, body);
   }
 
   @Delete('admin/:id')
+  @UseGuards(AdminGuard)
   async deleteUserByAdmin(@Param('id') targetId: string) {
     return this.usersService.deleteUserByAdmin(targetId);
   }

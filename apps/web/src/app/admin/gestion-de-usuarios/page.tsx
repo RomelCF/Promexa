@@ -36,154 +36,14 @@ interface DirectoryUser {
   };
 }
 
-const INITIAL_USERS: DirectoryUser[] = [
-  {
-    id: "u-101",
-    name: "Ana Ruiz Díaz",
-    handle: "@anaruiz",
-    email: "ana.ruiz@gmail.com",
-    profileType: "personal",
-    documentType: "DNI",
-    documentNumber: "72849102",
-    status: "activo",
-    statusLabel: "Activo",
-    isVerified: true,
-    registeredDate: "10/09/2026",
-    registeredRelative: "Hace 2 meses",
-    lastAccess: "Hoy, 14:05",
-    lastAccessSub: "IP: 190.234.12.8",
-    reportsCount: 0,
-    reportsLabel: "0 reportes",
-    riskLevel: "Bajo",
-    avatarInitials: "AR",
-    avatarColor: "bg-secondary-fixed text-on-secondary-fixed",
-    stats: { friends: 284, posts: 19, products: 0 }
-  },
-  {
-    id: "u-102",
-    name: "Carlos Mendoza Rios",
-    handle: "@carlosmendoza",
-    subtitle: "Textil & Retail",
-    email: "ventas@textilmendoza.pe",
-    profileType: "business",
-    documentType: "RUC",
-    documentNumber: "10452391081",
-    status: "activo",
-    statusLabel: "Activo",
-    isVerified: true,
-    registeredDate: "14/06/2026",
-    registeredRelative: "Hace 5 meses",
-    lastAccess: "Hace 25 min",
-    lastAccessSub: "Tienda Online Activa",
-    reportsCount: 1,
-    reportsLabel: "1 reporte leve",
-    riskLevel: "Bajo",
-    avatarInitials: "CM",
-    avatarColor: "bg-primary-fixed text-primary",
-    isStore: true,
-    stats: { followers: 1420, posts: 45, products: 28 }
-  },
-  {
-    id: "u-103",
-    name: "Pedro Mendoza Dávila",
-    handle: "@pedromendoza_99",
-    email: "pmendoza99@hotmail.com",
-    profileType: "personal",
-    documentType: "DNI",
-    documentNumber: "44920199",
-    status: "suspendido",
-    statusLabel: "Suspendido (14 días)",
-    isVerified: false,
-    registeredDate: "24/10/2026",
-    registeredRelative: "Hace 2 semanas",
-    lastAccess: "Hace 3 horas",
-    lastAccessSub: "Intento bloqueo activo",
-    reportsCount: 5,
-    reportsLabel: "5 reportes críticos",
-    riskLevel: "Alto",
-    avatarInitials: "PM",
-    avatarColor: "bg-error-container text-error",
-    stats: { friends: 89, posts: 12, products: 0 }
-  },
-  {
-    id: "u-104",
-    name: "TechStore Perú S.A.C.",
-    handle: "@techstore_peru",
-    subtitle: "Tecnología",
-    email: "contacto@techstore.pe",
-    profileType: "business",
-    documentType: "RUC",
-    documentNumber: "20601928411",
-    status: "activo",
-    statusLabel: "Activo",
-    isVerified: true,
-    registeredDate: "15/01/2026",
-    registeredRelative: "Hace 10 meses",
-    lastAccess: "Hoy, 09:15",
-    lastAccessSub: "32 transacciones hoy",
-    reportsCount: 0,
-    reportsLabel: "0 reportes",
-    riskLevel: "Bajo",
-    avatarInitials: "TS",
-    avatarColor: "bg-primary text-on-primary",
-    isStore: true,
-    stats: { followers: 3820, posts: 110, products: 64 }
-  },
-  {
-    id: "u-105",
-    name: "Lucía Fernández Gómez",
-    handle: "@lucia_fg",
-    email: "lucia.fer@outlook.com",
-    profileType: "personal",
-    documentType: "DNI",
-    documentNumber: "47109281",
-    status: "observacion",
-    statusLabel: "En Observación",
-    isVerified: true,
-    registeredDate: "18/07/2026",
-    registeredRelative: "Hace 4 meses",
-    lastAccess: "Ayer, 18:30",
-    lastAccessSub: "Móvil Android",
-    reportsCount: 4,
-    reportsLabel: "4 reportes",
-    riskLevel: "Medio",
-    avatarInitials: "LF",
-    avatarColor: "bg-tertiary-fixed text-on-tertiary-fixed",
-    stats: { friends: 312, posts: 8, products: 0 }
-  },
-  {
-    id: "u-106",
-    name: "Inversiones Global Express",
-    handle: "@inv_global",
-    subtitle: "E.I.R.L.",
-    email: "contacto@inversionesglobal.net",
-    profileType: "business",
-    documentType: "RUC",
-    documentNumber: "20559102839",
-    status: "bloqueado",
-    statusLabel: "Bloqueado Permanente",
-    isVerified: false,
-    registeredDate: "23/10/2026",
-    registeredRelative: "Hace 2 semanas",
-    lastAccess: "Hace 4 días",
-    lastAccessSub: "Acceso Revocado",
-    reportsCount: 8,
-    reportsLabel: "8 fraudes confirmados",
-    riskLevel: "Crítico",
-    avatarInitials: "IG",
-    avatarColor: "bg-error text-on-error",
-    isStore: true,
-    stats: { followers: 52, posts: 4, products: 0 }
-  }
-];
-
 export default function GestionUsuariosPage() {
   const { user, token, isLoading, logout } = useAuth();
   const router = useRouter();
 
   const [mounted, setMounted] = useState(false);
-  const [users, setUsers] = useState<DirectoryUser[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<DirectoryUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [directoryError, setDirectoryError] = useState('');
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -229,14 +89,14 @@ export default function GestionUsuariosPage() {
           const res = await fetch("/api/admin/users", {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-              setUsers(data);
-            }
-          }
+          if (!res.ok) throw new Error('No se pudo consultar el directorio');
+          const data = await res.json();
+          if (!Array.isArray(data)) throw new Error('Directorio invalido');
+          setUsers(data);
+          setDirectoryError('');
         } catch {
-          // Fallback to initial
+          setUsers([]);
+          setDirectoryError('No se pudo cargar el directorio de usuarios. Recarga para reintentar.');
         } finally {
           setLoadingUsers(false);
         }
@@ -818,6 +678,7 @@ export default function GestionUsuariosPage() {
         </header>
 
         <main className="flex-1 pt-16 w-full bg-surface px-space-lg py-space-lg">
+          {directoryError && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{directoryError}</p>}
           <div className="flex flex-col w-full space-y-space-lg">
             {/* 1. Header de Sección */}
             <section className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md">

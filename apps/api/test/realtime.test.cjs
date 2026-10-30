@@ -28,7 +28,7 @@ test('presence tracks real sessions, multiple tabs, disconnects and concurrent r
     },
   } });
   service.contacts = async () => [{ id: 'alice' }, { id: 'bob' }];
-  service.canContact = async () => false;
+  service.canContact = async (senderId, recipientId) => senderId !== recipientId && ['alice', 'bob'].includes(senderId) && ['alice', 'bob'].includes(recipientId);
   const users = { findById: async id => ['alice', 'bob'].includes(id) ? { id, name: id } : null,
     getFriends: async id => [{ id: id === 'alice' ? 'bob' : 'alice' }] };
   class TestModule {}

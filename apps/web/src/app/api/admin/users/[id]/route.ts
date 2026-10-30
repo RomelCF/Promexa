@@ -1,62 +1,19 @@
-import { NextResponse } from 'next/server';
-
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+﻿import { NextResponse } from 'next/server';
+async function forward(request: Request, { params }: { params: { id: string } }) {
   const authorization = request.headers.get('authorization');
+  if (!authorization) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   let body;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ message: 'Cuerpo de solicitud inválido' }, { status: 400 });
+  if (request.method === 'PATCH') {
+    try { body = JSON.stringify(await request.json()); }
+    catch { return NextResponse.json({ message: 'Cuerpo de solicitud invalido' }, { status: 400 }); }
   }
-
   try {
-    const res = await fetch(
-      `${process.env.API_URL || 'http://localhost:3001/api/v1'}/users/admin/${params.id}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authorization ? { Authorization: authorization } : {}),
-        },
-        body: JSON.stringify(body),
-        cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
-      }
-    );
-    if (res.ok) {
-      return NextResponse.json(await res.json());
-    }
-  } catch {
-    // If backend route fails or offline, return mock success
-  }
-
-  return NextResponse.json({ success: true, id: params.id, ...body });
+    const response = await fetch(`${process.env.API_URL || 'http://localhost:3001/api/v1'}/users/admin/${encodeURIComponent(params.id)}`, {
+      method: request.method, headers: { Authorization: authorization, 'Content-Type': 'application/json' },
+      body, cache: 'no-store', signal: AbortSignal.timeout(8000),
+    });
+    return NextResponse.json(await response.json(), { status: response.status });
+  } catch { return NextResponse.json({ message: 'No se pudo completar la operacion en el servidor' }, { status: 503 }); }
 }
-
-export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  const authorization = request.headers.get('authorization');
-  try {
-    const res = await fetch(
-      `${process.env.API_URL || 'http://localhost:3001/api/v1'}/users/admin/${params.id}`,
-      {
-        method: 'DELETE',
-        headers: authorization ? { Authorization: authorization } : {},
-        cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
-      }
-    );
-    if (res.ok) {
-      return NextResponse.json(await res.json());
-    }
-  } catch {
-    // mock fallback
-  }
-
-  return NextResponse.json({ success: true, message: 'Usuario eliminado' });
-}
+export const PATCH = forward;
+export const DELETE = forward;

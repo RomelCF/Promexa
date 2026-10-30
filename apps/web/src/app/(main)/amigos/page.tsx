@@ -1,5 +1,7 @@
 'use client';
 
+import RelationshipActions from '@/components/profile/RelationshipActions';
+import BusinessConnections from '@/components/profile/BusinessConnections';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -353,6 +355,8 @@ export default function AmigosPage() {
     r.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (user?.profileType === 'business') return <div className="max-w-4xl mx-auto px-4 py-6"><BusinessConnections /></div>;
+
   return (
     <div className="w-full max-w-4xl mx-auto px-4 py-6 space-y-5 animate-fadeIn">
       {/* Toast Notification */}
@@ -369,6 +373,8 @@ export default function AmigosPage() {
           <p className="mt-1 text-sm text-on-surface-variant">{friends.length} {friends.length === 1 ? 'amigo' : 'amigos'}</p>
         </div>
       </header>
+
+      <BusinessConnections />
 
       {/* Controles: Tabs y Buscador */}
       <div className="flex flex-col items-stretch gap-3">
@@ -584,48 +590,7 @@ export default function AmigosPage() {
                       </div>
                     </div>
 
-                    {/* Acciones de la tarjeta */}
-                    <div className="flex items-center gap-2 pt-3 border-t border-surface-container/60">
-                      {isSent ? (
-                        <button
-                          type="button"
-                          disabled
-                          className="flex-1 py-2 px-3 rounded-xl bg-amber-50 text-amber-700 text-xs font-semibold flex items-center justify-center gap-1.5 border border-amber-200 cursor-default"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">schedule</span>
-                          <span>Solicitud enviada</span>
-                        </button>
-                      ) : isReceived ? (
-                        <button
-                          type="button"
-                          disabled={isActing}
-                          onClick={() => handleAcceptRequest(person.friendshipId || person.id, person.name)}
-                          className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">check</span>
-                          <span>{isActing ? 'Aceptando...' : 'Aceptar solicitud'}</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={isActing}
-                          onClick={() => handleSendFriendRequest(person.id, person.name)}
-                          className="flex-1 py-2 px-3 rounded-xl bg-primary-container hover:bg-primary text-on-primary text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-50"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">{person.profileType === 'business' ? 'add' : 'person_add'}</span>
-                          <span>{isActing ? 'Procesando...' : (person.profileType === 'business' ? 'Seguir' : 'Agregar amigo')}</span>
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => handleStartChat(person)}
-                        className="py-2 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
-                        title="Enviar mensaje directo"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">chat</span>
-                      </button>
-                    </div>
+                    <RelationshipActions userId={person.id} />
                   </div>
                 );
               })}
@@ -886,75 +851,7 @@ export default function AmigosPage() {
 
               <div className="h-px bg-surface-container/80 my-4" />
 
-              {/* Botones de acción */}
-              <div className="flex flex-col sm:flex-row gap-2.5">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleStartChat({
-                      id: selectedProfile.id || '',
-                      name: selectedProfile.name,
-                      avatar: selectedProfile.avatar,
-                      isVerified: selectedProfile.isVerified,
-                    })
-                  }
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-semibold text-sm flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98"
-                >
-                  <span className="material-symbols-outlined text-[18px]">chat</span>
-                  <span>Conversar ahora</span>
-                </button>
-
-                {profileRelationship.status !== 'SELF' && selectedProfile.id && (
-                  <button
-                    type="button"
-                    disabled={
-                      actionLoadingId === selectedProfile.id ||
-                      profileRelationship.status === 'FRIENDS' ||
-                      profileRelationship.status === 'SENT' ||
-                      profileRelationship.status === 'LOADING'
-                    }
-                    onClick={() => {
-                      if (profileRelationship.status === 'RECEIVED' && profileRelationship.friendshipId) {
-                        handleAcceptRequest(profileRelationship.friendshipId, selectedProfile.name);
-                      } else {
-                        handleSendFriendRequest(selectedProfile.id!, selectedProfile.name);
-                      }
-                    }}
-                    className={`py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 transition-all shadow-xs ${
-                      profileRelationship.status === 'FRIENDS'
-                        ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#86EFAC]'
-                        : profileRelationship.status === 'SENT'
-                        ? 'bg-amber-50 text-amber-700 border border-amber-200 cursor-default'
-                        : profileRelationship.status === 'RECEIVED'
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                        : 'bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/40 active:scale-98'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {profileRelationship.status === 'FRIENDS'
-                        ? 'how_to_reg'
-                        : profileRelationship.status === 'SENT'
-                        ? 'schedule'
-                        : profileRelationship.status === 'RECEIVED'
-                        ? 'person_check'
-                        : 'person_add'}
-                    </span>
-                    <span>
-                      {actionLoadingId === selectedProfile.id
-                        ? 'Procesando...'
-                        : profileRelationship.status === 'LOADING'
-                        ? 'Verificando...'
-                        : profileRelationship.status === 'FRIENDS'
-                        ? (profileRelationship.isBusiness || selectedProfile.profileType === 'business' ? 'Siguiendo' : 'Amigos')
-                        : profileRelationship.status === 'SENT'
-                        ? 'Solicitud enviada'
-                        : profileRelationship.status === 'RECEIVED'
-                        ? 'Aceptar solicitud'
-                        : (profileRelationship.isBusiness || selectedProfile.profileType === 'business' ? 'Seguir' : 'Agregar amigo')}
-                    </span>
-                  </button>
-                )}
-              </div>
+              {selectedProfile.id && <RelationshipActions userId={selectedProfile.id} />}
 
               {selectedProfile.id && (
                 <Link

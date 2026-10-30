@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/postgres/prisma.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import * as bcrypt from 'bcryptjs';
+import { canMessage } from './relationship-policy';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
@@ -130,33 +131,8 @@ export class UsersService implements OnModuleInit {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    // 1. Relación de amistad con el usuario actual
-    let relationshipStatus: 'SELF' | 'FRIENDS' | 'SENT' | 'RECEIVED' | 'NONE' = 'NONE';
-    let friendshipId: string | undefined = undefined;
-
-    if (targetUser.id === currentUserId) {
-      relationshipStatus = 'SELF';
-    } else {
-      const friendship = await this.prisma.friendship.findFirst({
-        where: {
-          OR: [
-            { requesterId: currentUserId, addresseeId: targetUser.id },
-            { requesterId: targetUser.id, addresseeId: currentUserId },
-          ],
-        },
-      });
-
-      if (friendship) {
-        friendshipId = friendship.id;
-        if (friendship.status === 'ACCEPTED') {
-          relationshipStatus = 'FRIENDS';
-        } else if (friendship.requesterId === currentUserId) {
-          relationshipStatus = 'SENT';
-        } else {
-          relationshipStatus = 'RECEIVED';
-        }
-      }
-    }
+    const relationship = await this.getRelationshipStatus(currentUserId, targetUser.id);
+    const followers = targetUser.profileType === 'business' ? await this.getFollowers(targetUser.id) : [];
 
     // 2. Amigos del usuario objetivo
     const friends = await this.getFriends(targetUser.id);
@@ -252,13 +228,12 @@ export class UsersService implements OnModuleInit {
 
     return {
       user: targetUser,
-      relationship: {
-        status: relationshipStatus,
-        friendshipId,
-      },
+      relationship,
+      followers,
       stats: {
         postsCount: posts.length,
         friendsCount: friends.length,
+        followersCount: followers.length,
         photosCount: photos.length,
         mutualCount: mutualFriends.length,
       },
@@ -271,7 +246,7 @@ export class UsersService implements OnModuleInit {
 
   async getFriends(userId: string) {
     const friendships = await this.prisma.friendship.findMany({
-      where: { status: 'ACCEPTED', OR: [{ requesterId: userId }, { addresseeId: userId }] },
+      where: { status: 'ACCEPTED', requester: { profileType: 'personal' }, addressee: { profileType: 'personal' }, OR: [{ requesterId: userId }, { addresseeId: userId }] },
       include: {
         requester: { select: { id: true, name: true, email: true, avatar: true, profileType: true, isVerified: true, role: true } },
         addressee: { select: { id: true, name: true, email: true, avatar: true, profileType: true, isVerified: true, role: true } },
@@ -280,10 +255,29 @@ export class UsersService implements OnModuleInit {
     return friendships.map(f => f.requesterId === userId ? f.addressee : f.requester);
   }
 
+  // Existing accepted personal -> business rows are directed follows, not friendships.
+  async getFollowers(userId: string) {
+    const rows = await this.prisma.friendship.findMany({
+      where: { addresseeId: userId, status: 'ACCEPTED', requester: { profileType: 'personal' }, addressee: { profileType: 'business' } },
+      include: { requester: { select: { id: true, name: true, avatar: true, profileType: true, isVerified: true } } },
+    });
+    return Promise.all(rows.map(async row => ({ ...row.requester, canMessage: await canMessage(this.prisma, userId, row.requesterId) })));
+  }
+
+  async getFollowing(userId: string) {
+    const rows = await this.prisma.friendship.findMany({
+      where: { requesterId: userId, status: 'ACCEPTED', requester: { profileType: 'personal' }, addressee: { profileType: 'business' } },
+      include: { addressee: { select: { id: true, name: true, avatar: true, profileType: true, isVerified: true } } },
+    });
+    return rows.map(row => row.addressee);
+  }
+
   async getRecommendedFriends(currentUserId: string) {
+    const viewer = await this.findById(currentUserId);
+    if (!viewer || viewer.profileType === 'business') return [];
     // 1. Obtener amigos actuales para excluirlos y calcular amigos en común
     const myFriendships = await this.prisma.friendship.findMany({
-      where: { status: 'ACCEPTED', OR: [{ requesterId: currentUserId }, { addresseeId: currentUserId }] },
+      where: { status: 'ACCEPTED', requester: { profileType: 'personal' }, addressee: { profileType: 'personal' }, OR: [{ requesterId: currentUserId }, { addresseeId: currentUserId }] },
     });
     const myFriendIds = new Set(
       myFriendships.map((f) => (f.requesterId === currentUserId ? f.addresseeId : f.requesterId))
@@ -301,6 +295,7 @@ export class UsersService implements OnModuleInit {
     const candidates = await this.prisma.user.findMany({
       where: {
         id: { notIn: excludeIds },
+        profileType: 'personal',
       },
       select: {
         id: true,
@@ -325,6 +320,8 @@ export class UsersService implements OnModuleInit {
     const candidateFriendships = await this.prisma.friendship.findMany({
       where: {
         status: 'ACCEPTED',
+        requester: { profileType: 'personal' },
+        addressee: { profileType: 'personal' },
         OR: [{ requesterId: { in: candidateIds } }, { addresseeId: { in: candidateIds } }],
       },
     });
@@ -500,51 +497,17 @@ export class UsersService implements OnModuleInit {
       take: 10,
     });
 
-    let relationships: any[] = [];
-    if (currentUserId && users.length > 0) {
-      const userIds = users.map((u) => u.id);
-      relationships = await this.prisma.friendship.findMany({
-        where: {
-          OR: [
-            { requesterId: currentUserId, addresseeId: { in: userIds } },
-            { addresseeId: currentUserId, requesterId: { in: userIds } },
-          ],
-        },
-      });
-    }
-
-    return users.map((u) => {
-      let relationshipStatus: 'NONE' | 'REQUEST_SENT' | 'REQUEST_RECEIVED' | 'FRIENDS' = 'NONE';
-
-      if (currentUserId) {
-        const relation = relationships.find(
-          (f) =>
-            (f.requesterId === currentUserId && f.addresseeId === u.id) ||
-            (f.addresseeId === currentUserId && f.requesterId === u.id)
-        );
-
-        if (relation) {
-          if (relation.status === 'ACCEPTED') {
-            relationshipStatus = 'FRIENDS';
-          } else if (relation.requesterId === currentUserId) {
-            relationshipStatus = 'REQUEST_SENT';
-          } else {
-            relationshipStatus = 'REQUEST_RECEIVED';
-          }
-        }
-      }
-
+    return Promise.all(users.map(async u => {
+      const relation = currentUserId ? await this.getRelationshipStatus(currentUserId, u.id) : null;
       return {
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        profileType: u.profileType,
-        isVerified: u.isVerified,
-        avatar: u.avatar,
-        role: u.role,
-        relationshipStatus,
+        id: u.id, name: u.name, email: u.email, profileType: u.profileType,
+        isVerified: u.isVerified, avatar: u.avatar, role: u.role,
+        relationshipStatus: relation?.status === 'SENT' ? 'REQUEST_SENT' : relation?.status === 'RECEIVED' ? 'REQUEST_RECEIVED' : relation?.status || 'NONE',
+        canRequestFriendship: relation?.canRequestFriendship || false,
+        canFollow: relation?.canFollow || false,
+        canMessage: relation?.canMessage || false,
       };
-    });
+    }));
   }
 
   async sendFriendRequest(currentUserId: string, targetId: string) {
@@ -555,6 +518,11 @@ export class UsersService implements OnModuleInit {
     const targetUser = await this.findById(targetId);
     if (!targetUser) {
       throw new NotFoundException('Usuario destinatario no encontrado');
+    }
+
+    const currentUser = await this.findById(currentUserId);
+    if (!currentUser || currentUser.profileType === 'business') {
+      throw new BadRequestException('Las cuentas de negocio no pueden agregar amigos ni seguir perfiles');
     }
 
     const isBusiness = targetUser.profileType === 'business';
@@ -571,8 +539,8 @@ export class UsersService implements OnModuleInit {
     // Si la cuenta objetivo es de tipo empresa/negocio, se sigue automáticamente sin necesidad de confirmación
     if (isBusiness) {
       if (existing) {
-        if (existing.status === 'ACCEPTED') {
-          return { message: 'Ya sigues a este negocio', status: 'FRIENDS', isFollowing: true, isBusiness: true };
+        if (existing.status === 'ACCEPTED' && existing.requesterId === currentUserId) {
+          return { message: 'Ya sigues a este negocio', status: 'FOLLOWING', isFollowing: true, isBusiness: true };
         }
         const updated = await this.prisma.friendship.update({
           where: { id: existing.id },
@@ -586,14 +554,14 @@ export class UsersService implements OnModuleInit {
           data: {
             userId: targetId,
             actorId: currentUserId,
-            type: 'FRIEND_ACCEPTED',
+            type: 'NEW_FOLLOWER',
             message: 'ha comenzado a seguir tu empresa',
             friendshipId: updated.id,
           },
         });
         return {
           message: 'Ahora sigues a esta empresa',
-          status: 'FRIENDS',
+          status: 'FOLLOWING',
           isFollowing: true,
           isBusiness: true,
           friendship: updated,
@@ -612,7 +580,7 @@ export class UsersService implements OnModuleInit {
         data: {
           userId: targetId,
           actorId: currentUserId,
-          type: 'FRIEND_ACCEPTED',
+          type: 'NEW_FOLLOWER',
           message: 'ha comenzado a seguir tu empresa',
           friendshipId: newFollow.id,
         },
@@ -620,7 +588,7 @@ export class UsersService implements OnModuleInit {
 
       return {
         message: 'Ahora sigues a esta empresa',
-        status: 'FRIENDS',
+        status: 'FOLLOWING',
         isFollowing: true,
         isBusiness: true,
         friendship: newFollow,
@@ -690,45 +658,45 @@ export class UsersService implements OnModuleInit {
     };
   }
 
+  async followBusiness(currentUserId: string, targetId: string) {
+    const target = await this.findById(targetId);
+    if (!target || target.profileType !== 'business') throw new BadRequestException('Solo se puede seguir a negocios');
+    return this.sendFriendRequest(currentUserId, targetId);
+  }
+
+  async unfollowBusiness(currentUserId: string, targetId: string) {
+    const relation = await this.getRelationshipStatus(currentUserId, targetId);
+    if (!relation.canFollow) throw new BadRequestException('Solo las personas pueden seguir negocios');
+    await this.prisma.friendship.deleteMany({ where: { requesterId: currentUserId, addresseeId: targetId } });
+    return { status: 'NONE', isFollowing: false };
+  }
+
   async getRelationshipStatus(currentUserId: string, targetId: string) {
-    if (currentUserId === targetId) {
-      return { status: 'SELF' };
+    const [current, target] = await Promise.all([this.findById(currentUserId), this.findById(targetId)]);
+    if (!current || !target) throw new NotFoundException('Usuario no encontrado');
+    const capabilities = {
+      targetProfileType: target.profileType,
+      isBusiness: target.profileType === 'business',
+      canRequestFriendship: currentUserId !== targetId && current.profileType === 'personal' && target.profileType === 'personal',
+      canFollow: currentUserId !== targetId && current.profileType === 'personal' && target.profileType === 'business',
+      canMessage: await canMessage(this.prisma, currentUserId, targetId),
+    };
+    if (currentUserId === targetId) return { status: 'SELF', ...capabilities };
+    const friendship = await this.prisma.friendship.findFirst({ where: { OR: [
+      { requesterId: currentUserId, addresseeId: targetId },
+      { requesterId: targetId, addresseeId: currentUserId },
+    ] } });
+    let status = 'NONE';
+    if (friendship && friendship.status !== 'REJECTED') {
+      if (current.profileType === 'personal' && target.profileType === 'personal') {
+        status = friendship.status === 'ACCEPTED' ? 'FRIENDS' : friendship.requesterId === currentUserId ? 'SENT' : 'RECEIVED';
+      } else if (friendship.status === 'ACCEPTED' && friendship.requesterId === currentUserId && capabilities.canFollow) {
+        status = 'FOLLOWING';
+      } else if (friendship.status === 'ACCEPTED' && friendship.requesterId === targetId && current.profileType === 'business' && target.profileType === 'personal') {
+        status = 'FOLLOWER';
+      }
     }
-
-    const targetUser = await this.prisma.user.findUnique({
-      where: { id: targetId },
-      select: { profileType: true },
-    });
-
-    const isBusiness = targetUser?.profileType === 'business';
-
-    const friendship = await this.prisma.friendship.findFirst({
-      where: {
-        OR: [
-          { requesterId: currentUserId, addresseeId: targetId },
-          { addresseeId: currentUserId, requesterId: targetId },
-        ],
-      },
-    });
-
-    if (!friendship) {
-      return { status: 'NONE', targetProfileType: targetUser?.profileType || 'personal', isBusiness: !!isBusiness };
-    }
-
-    if (friendship.status === 'ACCEPTED') {
-      return { status: 'FRIENDS', friendshipId: friendship.id, targetProfileType: targetUser?.profileType || 'personal', isBusiness: !!isBusiness };
-    }
-
-    if (friendship.status === 'PENDING') {
-      return {
-        status: friendship.requesterId === currentUserId ? 'SENT' : 'RECEIVED',
-        friendshipId: friendship.id,
-        targetProfileType: targetUser?.profileType || 'personal',
-        isBusiness: !!isBusiness,
-      };
-    }
-
-    return { status: 'NONE', targetProfileType: targetUser?.profileType || 'personal', isBusiness: !!isBusiness };
+    return { status, friendshipId: status === 'NONE' ? undefined : friendship?.id, ...capabilities };
   }
 
   async getPendingFriendRequests(userId: string) {
@@ -737,6 +705,8 @@ export class UsersService implements OnModuleInit {
       where: {
         addresseeId: userId,
         status: 'PENDING',
+        requester: { profileType: 'personal' },
+        addressee: { profileType: 'personal' },
       },
       include: {
         requester: {
@@ -768,7 +738,7 @@ export class UsersService implements OnModuleInit {
     const notifications = await this.prisma.notification.findMany({
       where: {
         userId,
-        type: { in: ['FRIEND_ACCEPTED', 'FRIEND_REJECTED', 'NEW_POST', 'NEW_COMMENT', 'NEW_PRODUCT'] },
+        type: { in: ['FRIEND_ACCEPTED', 'FRIEND_REJECTED', 'NEW_FOLLOWER', 'NEW_POST', 'NEW_COMMENT', 'NEW_PRODUCT'] },
         read: false,
       },
       include: {
@@ -833,6 +803,11 @@ export class UsersService implements OnModuleInit {
 
     if (friendship.addresseeId !== currentUserId) {
       throw new ConflictException('No tienes permiso para aceptar esta solicitud');
+    }
+
+    const [requester, addressee] = await Promise.all([this.findById(friendship.requesterId), this.findById(currentUserId)]);
+    if (requester?.profileType !== 'personal' || addressee?.profileType !== 'personal') {
+      throw new BadRequestException('Solo las cuentas personales pueden aceptar amistades');
     }
 
     if (friendship.status === 'ACCEPTED') {
@@ -958,11 +933,13 @@ export class UsersService implements OnModuleInit {
         role: true,
         createdAt: true,
         updatedAt: true,
+        dailyAccesses: { orderBy: { lastLoginAt: 'desc' }, take: 1, select: { lastLoginAt: true } },
         _count: {
           select: {
             posts: true,
             products: true,
-            receivedFriendRequests: true,
+            sentFriendRequests: { where: { status: 'ACCEPTED', requester: { profileType: 'personal' }, addressee: { profileType: 'personal' } } },
+            receivedFriendRequests: { where: { status: 'ACCEPTED', requester: { profileType: 'personal' } } },
           },
         },
       },

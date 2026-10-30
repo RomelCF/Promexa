@@ -47,10 +47,25 @@ model User {
   products               Product[]    @relation("UserProducts")
   notificationsReceived  Notification[] @relation("UserNotifications")
   notificationsTriggered Notification[] @relation("ActorNotifications")
+  dailyAccesses          DailyUserAccess[]
 
   @@index([name])
   @@index([email])
   @@map("users")
+}
+
+model DailyUserAccess {
+  id           String      @id @default(uuid())
+  userId       String
+  day          DateTime    @db.Date
+  profileType  ProfileType
+  loginCount   Int         @default(1)
+  lastLoginAt  DateTime    @default(now()) @db.Timestamptz(3)
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([day, profileType])
+  @@map("daily_user_accesses")
 }
 
 model Friendship {

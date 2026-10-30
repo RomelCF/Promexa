@@ -88,7 +88,10 @@ export class PostsService {
       const friendships = await this.prisma.friendship.findMany({
         where: {
           status: 'ACCEPTED',
-          OR: [{ requesterId: actorId }, { addresseeId: actorId }],
+          OR: [
+            { requesterId: actorId, requester: { profileType: 'personal' }, addressee: { profileType: 'personal' } },
+            { addresseeId: actorId, requester: { profileType: 'personal' } },
+          ],
         },
         select: { requesterId: true, addresseeId: true },
       });

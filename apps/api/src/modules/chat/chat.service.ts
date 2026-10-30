@@ -1,16 +1,13 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/postgres/prisma.service';
+import { canMessage } from '../users/relationship-policy';
 
 @Injectable()
 export class ChatService {
   constructor(private readonly prisma: PrismaService) {}
 
   async canContact(senderId: string, recipientId: string, productId?: string) {
-    if (senderId === recipientId) return false;
-    if (productId && await this.prisma.product.findFirst({ where: { id: productId, sellerId: recipientId } })) return true;
-    return Boolean(await this.prisma.message.findFirst({ where: { OR: [
-      { senderId, recipientId }, { senderId: recipientId, recipientId: senderId },
-    ] } }));
+    return canMessage(this.prisma, senderId, recipientId, productId);
   }
 
   async save(senderId: string, recipientId: string, text: string, productId?: string, clientMessageId?: string) {
@@ -44,13 +41,20 @@ export class ChatService {
     }
   }
 
-  contacts(userId: string) {
-    return this.prisma.user.findMany({ where: { id: { not: userId }, OR: [
-      { sentFriendRequests: { some: { addresseeId: userId, status: 'ACCEPTED' } } },
-      { receivedFriendRequests: { some: { requesterId: userId, status: 'ACCEPTED' } } },
+  async contacts(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { profileType: true } });
+    if (!user) return [];
+    const contacts = await this.prisma.user.findMany({ where: { id: { not: userId }, OR: [
+      ...(user.profileType === 'business' ? [] : [
+        { profileType: 'personal' as const, sentFriendRequests: { some: { addresseeId: userId, status: 'ACCEPTED' as const } } },
+        { profileType: 'personal' as const, receivedFriendRequests: { some: { requesterId: userId, status: 'ACCEPTED' as const } } },
+      ]),
       { sentMessages: { some: { recipientId: userId } } },
       { receivedMessages: { some: { senderId: userId } } },
-    ] }, select: { id: true, name: true, avatar: true, isVerified: true } });
+    ] }, select: { id: true, name: true, avatar: true, isVerified: true, profileType: true } });
+    return Promise.all(contacts.map(async contact => ({ ...contact,
+      canMessage: await this.canContact(userId, contact.id),
+    })));
   }
 
   history(userId: string) {
