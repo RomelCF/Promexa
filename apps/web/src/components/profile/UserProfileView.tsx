@@ -61,6 +61,7 @@ export interface UserProfileData {
     content: string;
     category: string;
     tags: string[];
+    isEdited?: boolean;
     mediaUrl?: string;
     linkedProduct?: {
       name: string;
@@ -166,16 +167,26 @@ export default function UserProfileView({ userId }: { userId: string }) {
           method: 'POST',
           headers: { Authorization: `Bearer ${authToken}` },
         });
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          showToast('¡Solicitud de amistad enviada!');
-          setProfileData({
-            ...profileData,
-            relationship: { status: 'SENT' },
-          });
+          const isBusiness = user.profileType === 'business' || data.isBusiness || data.isFollowing || data.status === 'FRIENDS';
+          if (isBusiness || data.status === 'FRIENDS') {
+            showToast(`¡Ahora sigues a ${user.name}!`);
+            setProfileData({
+              ...profileData,
+              relationship: { status: 'FRIENDS', friendshipId: data.friendship?.id },
+              stats: { ...profileData.stats, friendsCount: profileData.stats.friendsCount + 1 },
+            });
+          } else {
+            showToast('¡Solicitud de amistad enviada!');
+            setProfileData({
+              ...profileData,
+              relationship: { status: 'SENT', friendshipId: data.friendship?.id },
+            });
+          }
           window.dispatchEvent(new CustomEvent('promexa:friendship-updated'));
         } else {
-          const err = await res.json();
-          showToast(err.message || 'Error al enviar solicitud');
+          showToast(data.message || 'Error al enviar solicitud');
         }
       } else if (relationship.status === 'RECEIVED' && relationship.friendshipId) {
         const res = await fetch(`/api/users/friend-requests/${relationship.friendshipId}/accept`, {
@@ -587,46 +598,70 @@ export default function UserProfileView({ userId }: { userId: string }) {
                   </>
                 ) : (
                   <>
-                    {/* Botón de relación de amistad */}
-                    <button
-                      type="button"
-                      disabled={
-                        actionLoading ||
-                        relationship.status === 'SENT' ||
-                        relationship.status === 'FRIENDS'
-                      }
-                      onClick={handleFriendAction}
-                      className={`px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all shadow-xs ${
-                        relationship.status === 'FRIENDS'
-                          ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#86EFAC]'
-                          : relationship.status === 'SENT'
-                          ? 'bg-amber-50 text-amber-700 border border-amber-200 cursor-default'
-                          : relationship.status === 'RECEIVED'
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
-                          : 'bg-primary-container hover:bg-primary text-white shadow-sm active:scale-98'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[18px]">
-                        {relationship.status === 'FRIENDS'
-                          ? 'how_to_reg'
-                          : relationship.status === 'SENT'
-                          ? 'schedule'
-                          : relationship.status === 'RECEIVED'
-                          ? 'person_check'
-                          : 'person_add'}
-                      </span>
-                      <span>
-                        {actionLoading
-                          ? 'Procesando...'
-                          : relationship.status === 'FRIENDS'
-                          ? 'Amigos'
-                          : relationship.status === 'SENT'
-                          ? 'Solicitud enviada'
-                          : relationship.status === 'RECEIVED'
-                          ? 'Aceptar solicitud'
-                          : 'Agregar a amigos'}
-                      </span>
-                    </button>
+                    {/* Botón de relación de amistad o seguimiento */}
+                    {user.profileType === 'business' ? (
+                      <button
+                        type="button"
+                        disabled={actionLoading || relationship.status === 'FRIENDS'}
+                        onClick={handleFriendAction}
+                        className={`px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all shadow-xs ${
+                          relationship.status === 'FRIENDS'
+                            ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#86EFAC] cursor-default'
+                            : 'bg-primary-container hover:bg-primary text-white shadow-sm active:scale-98'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          {relationship.status === 'FRIENDS' ? 'check' : 'add'}
+                        </span>
+                        <span>
+                          {actionLoading
+                            ? 'Procesando...'
+                            : relationship.status === 'FRIENDS'
+                            ? 'Siguiendo'
+                            : 'Seguir'}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={
+                          actionLoading ||
+                          relationship.status === 'SENT' ||
+                          relationship.status === 'FRIENDS'
+                        }
+                        onClick={handleFriendAction}
+                        className={`px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all shadow-xs ${
+                          relationship.status === 'FRIENDS'
+                            ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#86EFAC]'
+                            : relationship.status === 'SENT'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200 cursor-default'
+                            : relationship.status === 'RECEIVED'
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                            : 'bg-primary-container hover:bg-primary text-white shadow-sm active:scale-98'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          {relationship.status === 'FRIENDS'
+                            ? 'how_to_reg'
+                            : relationship.status === 'SENT'
+                            ? 'schedule'
+                            : relationship.status === 'RECEIVED'
+                            ? 'person_check'
+                            : 'person_add'}
+                        </span>
+                        <span>
+                          {actionLoading
+                            ? 'Procesando...'
+                            : relationship.status === 'FRIENDS'
+                            ? 'Amigos'
+                            : relationship.status === 'SENT'
+                            ? 'Solicitud enviada'
+                            : relationship.status === 'RECEIVED'
+                            ? 'Aceptar solicitud'
+                            : 'Agregar a amigos'}
+                        </span>
+                      </button>
+                    )}
 
                     {/* Botón de Enviar Mensaje */}
                     <button
@@ -977,6 +1012,12 @@ export default function UserProfileView({ userId }: { userId: string }) {
                           </div>
                           <div className="flex items-center gap-2 text-xs text-outline">
                             <span>{post.time}</span>
+                            {post.isEdited && (
+                              <>
+                                <span>·</span>
+                                <span className="italic font-medium text-on-surface-variant">(editado)</span>
+                              </>
+                            )}
                             <span>·</span>
                             <span className="flex items-center gap-0.5">
                               <span className="material-symbols-outlined text-[13px]">public</span>

@@ -11,7 +11,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isLoading && user) {
-      router.replace('/');
+      router.replace(user.role === 'ADMIN' ? '/admin' : '/');
     }
   }, [user, isLoading, router]);
 
@@ -38,9 +38,10 @@ export default function LoginPage() {
     }
 
     setAuthStatus('success');
+    const targetPath = result.user?.role === 'ADMIN' ? '/admin' : '/';
     setTimeout(() => {
-      router.push('/');
-    }, 1000);
+      router.push(targetPath);
+    }, 600);
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -59,12 +60,6 @@ export default function LoginPage() {
     setTimeout(() => {
       router.push('/');
     }, 1000);
-  };
-
-  const fillDemoAccount = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword('promexa123');
-    setErrorMessage(null);
   };
 
   return (
@@ -258,33 +253,6 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {/* Quick Demo Credentials Assistant */}
-          {authMode === 'login' && (
-            <div className="mb-6 p-3 rounded-xl bg-surface-container-low border border-primary/20 flex flex-col gap-1.5">
-              <span className="text-caption font-caption text-outline font-medium">
-                Cuentas de prueba para acceso rápido:
-              </span>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  type="button"
-                  className="px-2.5 py-1 rounded-md bg-surface-container-lowest hover:bg-surface-container text-primary font-caption text-caption border border-primary/30 transition-colors flex items-center gap-1"
-                  onClick={() => fillDemoAccount('carlos@promexa.com')}
-                >
-                  <span className="font-semibold">Carlos Mendoza:</span>
-                  <span>carlos@promexa.com</span>
-                </button>
-                <button
-                  type="button"
-                  className="px-2.5 py-1 rounded-md bg-surface-container-lowest hover:bg-surface-container text-primary font-caption text-caption border border-primary/30 transition-colors flex items-center gap-1"
-                  onClick={() => fillDemoAccount('donpedro@cafe.pe')}
-                >
-                  <span className="font-semibold">Don Pedro:</span>
-                  <span>donpedro@cafe.pe</span>
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Error Alert Box */}
           {errorMessage && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-body-md font-body-md flex items-center gap-2 animate-fadeIn">
@@ -310,21 +278,21 @@ export default function LoginPage() {
                     className="font-label-md text-label-md text-on-surface font-medium flex items-center justify-between"
                     htmlFor="email"
                   >
-                    <span>Correo electrónico</span>
+                    <span>Correo electrónico o usuario</span>
                     <span className="font-caption text-caption text-on-surface-variant">
                       Requerido
                     </span>
                   </label>
                   <div className="relative flex items-center">
                     <span className="material-symbols-outlined absolute left-3.5 text-outline text-[20px] pointer-events-none">
-                      mail
+                      person
                     </span>
                     <input
                       className="w-full h-11 pl-11 pr-4 bg-surface-container-lowest rounded-lg border border-outline-variant/60 font-body-md text-body-md text-on-surface shadow-sm placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
                       id="email"
-                      placeholder="ejemplo@correo.com"
+                      placeholder="adminpromexa o tu@correo.com"
                       required
-                      type="email"
+                      type="text"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />

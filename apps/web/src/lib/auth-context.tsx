@@ -20,7 +20,7 @@ interface AuthContextType {
   user: UserProfile | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, pass: string) => Promise<{ success: boolean; user?: UserProfile; error?: string }>;
   register: (
     name: string,
     email: string,
@@ -45,7 +45,7 @@ const STORAGE_KEY_TOKEN = 'promexa_auth_token';
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('storage', syncSession);
   }, [token]);
 
-  const login = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (email: string, pass: string): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -107,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(data.accessToken);
       localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(data.user));
       localStorage.setItem(STORAGE_KEY_TOKEN, data.accessToken);
-      return { success: true };
+      return { success: true, user: data.user };
     } catch (err: unknown) {
       return { success: false, error: 'No se pudo conectar con el servidor de autenticación' };
     }

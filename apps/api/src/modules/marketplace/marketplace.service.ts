@@ -10,6 +10,39 @@ export class MarketplaceService {
     return { ...data, store: profile.name, sellerAvatar: profile.avatar, isVerified: profile.isVerified,
       image: product.image || '', createdAt: product.createdAt.getTime() };
   }
+
+  private async notifyFollowers(actorId: string, actorName: string, productName: string, productId: string): Promise<void> {
+    try {
+      const friendships = await this.prisma.friendship.findMany({
+        where: {
+          status: 'ACCEPTED',
+          OR: [{ requesterId: actorId }, { addresseeId: actorId }],
+        },
+        select: { requesterId: true, addresseeId: true },
+      });
+
+      const friendIds = friendships.map((f) =>
+        f.requesterId === actorId ? f.addresseeId : f.requesterId,
+      );
+
+      if (!friendIds.length) return;
+
+      await this.prisma.notification.createMany({
+        data: friendIds.map((userId) => ({
+          userId,
+          actorId,
+          type: 'NEW_PRODUCT',
+          message: `${actorName} oferto un nuevo producto: "${productName}"`,
+          friendshipId: productId,
+          read: false,
+        })),
+        skipDuplicates: true,
+      });
+    } catch (err) {
+      console.error('[MarketplaceService.notifyFollowers] Error:', err);
+    }
+  }
+
   async find(id: string) {
     const product = await this.prisma.product.findUnique({ where: { id }, include: { seller } });
     if (!product) throw new NotFoundException('El producto ya no esta disponible');
@@ -29,6 +62,10 @@ export class MarketplaceService {
         store: user.name, isVerified: user.isVerified, status: 'Disponible' },
       include: { seller },
     });
+
+    // Notificar amigos/seguidores (fire-and-forget)
+    this.notifyFollowers(userId, user.name, data.name, product.id);
+
     return this.serialize(product);
   }
   async status(userId: string, id: string, status: string) {
@@ -44,3 +81,4 @@ export class MarketplaceService {
     return { success: true };
   }
 }
+

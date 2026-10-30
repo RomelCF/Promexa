@@ -13,7 +13,7 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, pass: string) {
-    const user = await this.usersService.findByEmail(email);
+    const user = await this.usersService.findByEmailOrUsername(email);
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas. Verifica tu correo y contraseña.');
     }

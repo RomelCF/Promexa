@@ -4,6 +4,7 @@ import {
   Body,
   Get,
   Post,
+  Delete,
   Query,
   Param,
   UseGuards,
@@ -93,4 +94,20 @@ export class UsersController {
     const currentUserId = req.user.userId;
     return this.usersService.rejectFriendRequest(requestId, currentUserId);
   }
+
+  @Get('admin/all')
+  async getAllUsersForAdmin() {
+    return this.usersService.getAllUsersForAdmin();
+  }
+
+  @Patch('admin/:id')
+  async updateUserByAdmin(@Param('id') targetId: string, @Body() body: any) {
+    return this.usersService.updateUserByAdmin(targetId, body);
+  }
+
+  @Delete('admin/:id')
+  async deleteUserByAdmin(@Param('id') targetId: string) {
+    return this.usersService.deleteUserByAdmin(targetId);
+  }
 }
+
