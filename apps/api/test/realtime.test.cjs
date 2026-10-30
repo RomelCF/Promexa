@@ -8,7 +8,7 @@ const { JwtModule, JwtService } = require('@nestjs/jwt');
 const { ChatGateway } = require('../src/modules/chat/chat.gateway');
 const { ChatService } = require('../src/modules/chat/chat.service');
 const { UsersService } = require('../src/modules/users/users.service');
-const { io } = require('../../web/node_modules/socket.io-client');
+const { io } = require('socket.io-client');
 const { randomUUID } = require('node:crypto');
 const { realtimeHealth } = require('../src/websockets/realtime-health');
 const ack = (socket, event, payload) => new Promise((resolve, reject) => socket.timeout(4000).emit(event, payload, (error, data) => error ? reject(error) : resolve(data)));
